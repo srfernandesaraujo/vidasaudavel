@@ -5,10 +5,13 @@ import {
   Plus, 
   Copy, 
   Trash2, 
-  Check, 
   Dumbbell, 
   Edit3, 
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Activity
 } from 'lucide-react';
 import './Styles/workouts.css';
 
@@ -41,6 +44,20 @@ export const Workouts: React.FC = () => {
     notes: ''
   });
 
+  // Controle de colapsáveis (Cardio e Observações)
+  const [isCardioExpanded, setIsCardioExpanded] = useState(false);
+  const [isObsExpanded, setIsObsExpanded] = useState(false);
+
+  // Controle de expansão de exercícios de cada treino
+  const [expandedWorkouts, setExpandedWorkouts] = useState<Record<string, boolean>>({});
+
+  const toggleWorkoutExercises = (workoutId: string) => {
+    setExpandedWorkouts(prev => ({
+      ...prev,
+      [workoutId]: !prev[workoutId]
+    }));
+  };
+
   const muscleGroupsList = [
     'Peitoral', 'Dorsal', 'Trapézio', 'Deltóide', 'Bíceps', 'Tríceps', 
     'Antebraço', 'Abdominal', 'Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilha'
@@ -51,6 +68,21 @@ export const Workouts: React.FC = () => {
     setWorkouts(db.getWorkouts());
     setExercises(db.getExercises());
     setLogs(db.getWorkoutLogs());
+  };
+
+  // Mapeamento dinâmico de dias sugeridos para exibição premium
+  const getSuggestedDay = (workoutName: string, index: number) => {
+    const nameLower = workoutName.toLowerCase();
+    if (nameLower.includes('treino a') || nameLower.includes('força a')) return 'Segunda-feira & Quinta-feira';
+    if (nameLower.includes('treino b') || nameLower.includes('força b')) return 'Terça-feira & Sexta-feira';
+    if (nameLower.includes('treino c') || nameLower.includes('força c')) return 'Quarta-feira & Sábado';
+    
+    // Fallback inteligente
+    const fallbacks = [
+      'Segunda-feira', 'Terça-feira', 'Quarta-feira', 
+      'Quinta-feira', 'Sexta-feira', 'Sábado'
+    ];
+    return fallbacks[index % fallbacks.length];
   };
 
   // -------------------------------------------------------------
@@ -72,7 +104,8 @@ export const Workouts: React.FC = () => {
     refreshData();
   };
 
-  const handleDeleteWorkout = (id: string) => {
+  const handleDeleteWorkout = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita expandir o card ao deletar
     if (window.confirm('Deseja realmente deletar este treino e todos os seus exercícios associados?')) {
       db.deleteWorkout(id);
       refreshData();
@@ -82,7 +115,8 @@ export const Workouts: React.FC = () => {
   // -------------------------------------------------------------
   // HANDLERS DE EXERCÍCIO
   // -------------------------------------------------------------
-  const openAddExerciseModal = (workoutId: string) => {
+  const openAddExerciseModal = (workoutId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita colapsar ao clicar no botão
     setEditingExercise(null);
     setExerciseForm({
       name: '',
@@ -114,9 +148,8 @@ export const Workouts: React.FC = () => {
     e.preventDefault();
     if (!exerciseForm.name.trim() || !exerciseForm.workoutId) return;
 
-    const targetId = editingExercise ? editingExercise.id : `ex-${Date.now()}`;
     db.saveExercise({
-      id: targetId,
+      id: editingExercise ? editingExercise.id : `ex-${Date.now()}`,
       name: exerciseForm.name.trim(),
       muscleGroup: exerciseForm.muscleGroup,
       workoutId: exerciseForm.workoutId,
@@ -127,25 +160,27 @@ export const Workouts: React.FC = () => {
     });
 
     setIsExerciseModalOpen(false);
+    setEditingExercise(null);
     refreshData();
   };
 
   const handleDeleteExercise = (id: string) => {
-    if (window.confirm('Deseja realmente excluir este exercício?')) {
+    if (window.confirm('Excluir este exercício do treino?')) {
       db.deleteExercise(id);
       refreshData();
     }
   };
 
   // -------------------------------------------------------------
-  // REGISTRO DE TREINO EXECUTADO (LOG)
+  // HANDLERS DE HISTÓRICO / REGISTRO
   // -------------------------------------------------------------
-  const openLogWorkoutModal = (workout: Workout) => {
+  const openLogWorkoutModal = (workout: Workout, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita expandir o card
     setSelectedWorkoutForLog(workout);
     setLogDate(new Date().toISOString().split('T')[0]);
     
-    // Inicializa pesos com PR atual de cada exercício
-    const workoutExs = exercises.filter(e => e.workoutId === workout.id);
+    // Inicializa cargas atuais
+    const workoutExs = exercises.filter(ex => ex.workoutId === workout.id);
     const initialWeights: Record<string, number> = {};
     workoutExs.forEach(ex => {
       initialWeights[ex.id] = ex.prWeight || 0;
@@ -154,16 +189,12 @@ export const Workouts: React.FC = () => {
     setIsLogModalOpen(true);
   };
 
-  const handleSaveWorkoutLog = () => {
+  const handleSaveWorkoutLog = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedWorkoutForLog) return;
 
-    const workoutExs = exercises.filter(e => e.workoutId === selectedWorkoutForLog.id);
-    if (workoutExs.length === 0) {
-      alert('Adicione pelo menos um exercício ao treino antes de registrá-lo.');
-      return;
-    }
-
-    const logExercises = workoutExs.map(ex => ({
+    const workoutExs = exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id);
+    const loggedExercises = workoutExs.map(ex => ({
       name: ex.name,
       muscleGroup: ex.muscleGroup,
       series: ex.series,
@@ -175,28 +206,35 @@ export const Workouts: React.FC = () => {
       workoutId: selectedWorkoutForLog.id,
       workoutName: selectedWorkoutForLog.name,
       date: logDate,
-      exercises: logExercises
+      exercises: loggedExercises
+    });
+
+    // Atualiza os PRs locais se a carga anotada for maior que o PR anterior
+    workoutExs.forEach(ex => {
+      const weightLogged = logWeights[ex.id] || 0;
+      if (weightLogged > ex.prWeight) {
+        db.saveExercise({
+          ...ex,
+          prWeight: weightLogged
+        });
+      }
     });
 
     setIsLogModalOpen(false);
     setSelectedWorkoutForLog(null);
     refreshData();
-    alert('Treino registrado com sucesso! O histórico e os recordes de carga foram atualizados.');
+    alert('Treino registrado com sucesso!');
   };
 
-  // -------------------------------------------------------------
-  // TEMPLATES PRÉ-DEFINIDOS (CARREGAMENTO)
-  // -------------------------------------------------------------
-  const loadDefaultTemplate = (templateType: 'abc' | 'power') => {
-    if (window.confirm('Carregar este template irá substituir seus treinos atuais. Deseja continuar?')) {
-      // Limpa dados atuais
-      const currentWorkouts = db.getWorkouts();
-      currentWorkouts.forEach(w => db.deleteWorkout(w.id));
-
-      if (templateType === 'abc') {
-        db.saveWorkout({ id: 'treino-a', name: 'Treino A (Costas & Bíceps)', isTemplate: true });
-        db.saveWorkout({ id: 'treino-b', name: 'Treino B (Peito & Tríceps)', isTemplate: true });
-        db.saveWorkout({ id: 'treino-c', name: 'Treino C (Pernas Completas)', isTemplate: true });
+  const handleTemplateSelection = (templateType: 'hypertrophy' | 'power') => {
+    if (window.confirm('Esta operação irá sobrescrever seus treinos e exercícios de demonstração padrão. Prosseguir?')) {
+      // Limpa dados anteriores
+      workouts.forEach(w => db.deleteWorkout(w.id));
+      
+      if (templateType === 'hypertrophy') {
+        db.saveWorkout({ id: 'treino-a', name: 'Treino A (Puxar)', isTemplate: true });
+        db.saveWorkout({ id: 'treino-b', name: 'Treino B (Empurrar)', isTemplate: true });
+        db.saveWorkout({ id: 'treino-c', name: 'Treino C (Pernas)', isTemplate: true });
 
         // Treino A Exercícios
         db.saveExercise({ id: 'ex-a1', name: 'Puxada Alta (Barra)', muscleGroup: 'Dorsal', workoutId: 'treino-a', series: 4, repetitions: '10-12', prWeight: 45, notes: '' });
@@ -237,12 +275,10 @@ export const Workouts: React.FC = () => {
   // -------------------------------------------------------------
   // CÁLCULO DADOS COMPILADOS DE EXERCÍCIOS
   // -------------------------------------------------------------
-  // Agrupa logs para consulta rápida do "Último treino" e "Dias decorridos" por exercício
   const exerciseStats = useMemo(() => {
     const stats: Record<string, { lastDate: string; daysAgo: number | string }> = {};
 
     exercises.forEach(ex => {
-      // Acha o log mais recente que tenha o nome do exercício
       const matchLogs = logs.filter(log => 
         log.workoutId === ex.workoutId && 
         log.exercises.some(le => le.name === ex.name)
@@ -259,7 +295,7 @@ export const Workouts: React.FC = () => {
         };
       } else {
         stats[ex.id] = {
-          lastDate: 'Ainda não realizado',
+          lastDate: 'Não realizado',
           daysAgo: '-'
         };
       }
@@ -270,12 +306,13 @@ export const Workouts: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Cabeçalho superior */}
       <header className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ textAlign: 'left' }}>
           <h1 style={{ fontSize: '2.25rem', background: 'linear-gradient(135deg, #ffffff, #8b92b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Módulo de Musculação
+            Treinos
           </h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Gerencie seus treinos, crie templates, e acompanhe o mapa de fadiga muscular.</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Gerencie suas rotinas semanais, execute séries e veja o mapa de fadiga.</p>
         </div>
 
         <div className="workouts-header-actions">
@@ -296,7 +333,7 @@ export const Workouts: React.FC = () => {
           className={`workout-tab-btn ${activeSubTab === 'workouts' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('workouts')}
         >
-          Minha Planilha de Treinos
+          Distribuição do planejamento
         </button>
         <button 
           className={`workout-tab-btn ${activeSubTab === 'musclemap' ? 'active' : ''}`}
@@ -318,7 +355,54 @@ export const Workouts: React.FC = () => {
           <MuscleMap />
         </section>
       ) : (
-        <section>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {workouts.length > 0 && (
+            <>
+              {/* 1. Colapsável: Exercício Aeróbico */}
+              <div className="glass-card collapsible-panel">
+                <button 
+                  className="collapsible-header"
+                  onClick={() => setIsCardioExpanded(!isCardioExpanded)}
+                >
+                  <div className="header-left">
+                    <Activity size={18} className="icon-blue" />
+                    <span>Exercício aeróbico</span>
+                  </div>
+                  {isCardioExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {isCardioExpanded && (
+                  <div className="collapsible-content">
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                      Sugerido: 20 a 30 minutos de corrida moderada ou caminhada inclinada após a musculação, 3 vezes por semana. Mantém o condicionamento e auxilia na recuperação ativa de membros inferiores.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Colapsável: Observações */}
+              <div className="glass-card collapsible-panel">
+                <button 
+                  className="collapsible-header"
+                  onClick={() => setIsObsExpanded(!isObsExpanded)}
+                >
+                  <div className="header-left">
+                    <FileText size={18} className="icon-purple" />
+                    <span>Observações</span>
+                  </div>
+                  {isObsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {isObsExpanded && (
+                  <div className="collapsible-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    <div>• Focar em cadência controlada (2s concêntrica, 3s excêntrica) para melhor ativação.</div>
+                    <div>• Descanso sugerido: 60s a 90s entre séries normais; até 120s para agachamento e terra.</div>
+                    <div>• Hidrate-se: beber no mínimo 500ml de água durante a sessão de treino.</div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Listagem de Treinos Semanais (Inspirado no Prime) */}
           {workouts.length === 0 ? (
             <div className="glass-card" style={{ padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
               <Dumbbell size={48} style={{ opacity: 0.3, marginBottom: '1rem' }} />
@@ -329,104 +413,144 @@ export const Workouts: React.FC = () => {
               </div>
             </div>
           ) : (
-            workouts.map((workout) => {
-              const workoutExs = exercises.filter(e => e.workoutId === workout.id);
-              
-              return (
-                <div key={workout.id} className="glass-card workout-group-card" style={{ padding: '1.5rem' }}>
-                  <div className="workout-group-header">
-                    <div className="workout-group-title">
-                      <Dumbbell size={20} color="var(--accent-emerald)" />
-                      <span>{workout.name}</span>
-                      <span className="workout-group-badge">{workoutExs.length} {workoutExs.length === 1 ? 'Exercício' : 'Exercícios'}</span>
+            <div className="workout-cards-list">
+              {workouts.map((workout, index) => {
+                const workoutExs = exercises.filter(e => e.workoutId === workout.id);
+                
+                // Calcula músculos trabalhados dinamicamente para o cabeçalho do card
+                const workedMuscles = useMemo(() => {
+                  if (workoutExs.length === 0) return 'Sem exercícios';
+                  const muscles = Array.from(new Set(workoutExs.map(e => e.muscleGroup)));
+                  return muscles.slice(0, 3).join(' • ') + (muscles.length > 3 ? '...' : '');
+                }, [workoutExs]);
+
+                const isExpanded = !!expandedWorkouts[workout.id];
+                const suggestedDay = getSuggestedDay(workout.name, index);
+
+                return (
+                  <div 
+                    key={workout.id} 
+                    className={`workout-card-premium glass-card ${isExpanded ? 'expanded' : ''}`}
+                    onClick={() => toggleWorkoutExercises(workout.id)}
+                  >
+                    <div className="premium-card-main">
+                      <div className="premium-card-info">
+                        <span className="suggested-day">{suggestedDay}</span>
+                        <h2 className="workout-muscles">{workedMuscles}</h2>
+                        
+                        <div className="premium-card-footer">
+                          <div className="team-indicator">
+                            <div className="team-avatar">VS</div>
+                            <span>Vida Saudável</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="premium-card-actions">
+                        <span className="workout-tag-pill">{workout.name}</span>
+                        
+                        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.85rem' }}>
+                          <button 
+                            className="btn btn-primary btn-sm" 
+                            style={{ height: '32px', fontSize: '0.8rem', padding: '0.35rem 0.75rem' }} 
+                            onClick={(e) => openLogWorkoutModal(workout, e)}
+                          >
+                            Iniciar treino
+                          </button>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ height: '32px', fontSize: '0.8rem', padding: '0.35rem 0.5rem' }} 
+                            onClick={(e) => openAddExerciseModal(workout.id, e)}
+                          >
+                            + Add
+                          </button>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ height: '32px', padding: '0.35rem 0.5rem', color: '#ff6b6b' }} 
+                            onClick={(e) => handleDeleteWorkout(workout.id, e)}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => openLogWorkoutModal(workout)}>
-                        <Check size={14} color="var(--accent-emerald)" />
-                        Iniciar/Concluir Treino
-                      </button>
-                      <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => openAddExerciseModal(workout.id)}>
-                        <Plus size={14} />
-                        Adicionar Exercício
-                      </button>
-                      <button className="btn btn-secondary" style={{ padding: '0.4rem 0.6rem', color: '#ff6b6b' }} onClick={() => handleDeleteWorkout(workout.id)}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {/* Exercícios Expansíveis por dentro do card */}
+                    {isExpanded && (
+                      <div className="premium-card-exercises" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="exercises-title">Exercícios da Planilha ({workoutExs.length})</h3>
+                        {workoutExs.length === 0 ? (
+                          <p className="no-exercises-text">Nenhum exercício cadastrado. Clique em "+ Add" acima para adicionar.</p>
+                        ) : (
+                          <div className="table-container" style={{ marginTop: '0.5rem' }}>
+                            <table className="custom-table">
+                              <thead>
+                                <tr>
+                                  <th>Grupo</th>
+                                  <th>Exercício</th>
+                                  <th>Séries</th>
+                                  <th>Reps</th>
+                                  <th>PR Carga</th>
+                                  <th>Último</th>
+                                  <th>Dias</th>
+                                  <th>Anotações</th>
+                                  <th style={{ width: '80px' }}>Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {workoutExs.map((ex) => {
+                                  const stats = exerciseStats[ex.id] || { lastDate: '-', daysAgo: '-' };
+                                  return (
+                                    <tr key={ex.id}>
+                                      <td>
+                                        <span className={`badge ${muscleGroupsList.slice(0, 8).includes(ex.muscleGroup) ? 'badge-superior' : 'badge-inferior'}`}>
+                                          {ex.muscleGroup}
+                                        </span>
+                                      </td>
+                                      <td style={{ fontWeight: 600 }}>{ex.name}</td>
+                                      <td>{ex.series}</td>
+                                      <td>{ex.repetitions}</td>
+                                      <td>
+                                        <span className="exercise-pr-tag">
+                                          {ex.prWeight > 0 ? `${ex.prWeight} kg` : 'Sem peso'}
+                                        </span>
+                                      </td>
+                                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{stats.lastDate}</td>
+                                      <td style={{ fontSize: '0.8rem', fontWeight: 600, color: stats.daysAgo === '-' ? 'var(--text-muted)' : (Number(stats.daysAgo) > 7 ? 'var(--accent-orange)' : 'var(--accent-emerald)') }}>
+                                        {stats.daysAgo}
+                                      </td>
+                                      <td className="exercise-notes" title={ex.notes}>{ex.notes || '-'}</td>
+                                      <td>
+                                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                          <button 
+                                            className="btn btn-secondary" 
+                                            style={{ padding: '0.25rem 0.4rem' }} 
+                                            onClick={() => openEditExerciseModal(ex)}
+                                          >
+                                            <Edit3 size={11} />
+                                          </button>
+                                          <button 
+                                            className="btn btn-secondary" 
+                                            style={{ padding: '0.25rem 0.4rem', color: '#ff6b6b' }} 
+                                            onClick={() => handleDeleteExercise(ex.id)}
+                                          >
+                                            <Trash2 size={11} />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-
-                  {workoutExs.length === 0 ? (
-                    <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
-                      Nenhum exercício cadastrado para este treino. Clique em "Adicionar Exercício" acima.
-                    </div>
-                  ) : (
-                    <div className="table-container">
-                      <table className="custom-table">
-                        <thead>
-                          <tr>
-                            <th>Grupo Muscular</th>
-                            <th>Exercício</th>
-                            <th>Séries</th>
-                            <th>Repetições</th>
-                            <th>PR Peso (Carga Máx)</th>
-                            <th>Último Treino</th>
-                            <th>Dias decorridos</th>
-                            <th>Anotações</th>
-                            <th style={{ width: '80px' }}>Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {workoutExs.map((ex) => {
-                            const stats = exerciseStats[ex.id] || { lastDate: '-', daysAgo: '-' };
-                            return (
-                              <tr key={ex.id}>
-                                <td>
-                                  <span className={`badge ${muscleGroupsList.slice(0, 8).includes(ex.muscleGroup) ? 'badge-superior' : 'badge-inferior'}`}>
-                                    {ex.muscleGroup}
-                                  </span>
-                                </td>
-                                <td style={{ fontWeight: 600 }}>{ex.name}</td>
-                                <td>{ex.series}</td>
-                                <td>{ex.repetitions}</td>
-                                <td>
-                                  <span className="exercise-pr-tag">
-                                    {ex.prWeight > 0 ? `${ex.prWeight} kg` : 'Sem peso'}
-                                  </span>
-                                </td>
-                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{stats.lastDate}</td>
-                                <td style={{ fontSize: '0.85rem', fontWeight: 600, color: stats.daysAgo === '-' ? 'var(--text-muted)' : (Number(stats.daysAgo) > 7 ? 'var(--accent-orange)' : 'var(--accent-emerald)') }}>
-                                  {stats.daysAgo}
-                                </td>
-                                <td className="exercise-notes" title={ex.notes}>{ex.notes || '-'}</td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                    <button 
-                                      className="btn btn-secondary" 
-                                      style={{ padding: '0.3rem 0.5rem' }} 
-                                      onClick={() => openEditExerciseModal(ex)}
-                                    >
-                                      <Edit3 size={12} />
-                                    </button>
-                                    <button 
-                                      className="btn btn-secondary" 
-                                      style={{ padding: '0.3rem 0.5rem', color: '#ff6b6b' }} 
-                                      onClick={() => handleDeleteExercise(ex.id)}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </section>
       )}
@@ -578,7 +702,65 @@ export const Workouts: React.FC = () => {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setIsExerciseModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Salvar Exercício</button>
+                <button type="submit" className="btn btn-primary">{editingExercise ? 'Salvar Alterações' : 'Criar Exercício'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Iniciar / Concluir Treino (Anotar Cargas Executadas) */}
+      {isLogModalOpen && selectedWorkoutForLog && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Registrar Execução: {selectedWorkoutForLog.name}</h3>
+              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsLogModalOpen(false)}>X</button>
+            </div>
+            <form onSubmit={handleSaveWorkoutLog}>
+              <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="form-group">
+                  <label htmlFor="logDate">Data da Conclusão</label>
+                  <input 
+                    id="logDate"
+                    type="date" 
+                    className="form-control" 
+                    value={logDate} 
+                    onChange={(e) => setLogDate(e.target.value)} 
+                    required 
+                  />
+                </div>
+
+                <div style={{ borderBottom: '1px solid var(--border-subtle)', margin: '0.5rem 0' }}></div>
+                
+                <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Anote as Cargas Concluídas (kg)</h4>
+                
+                {exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id).map(ex => (
+                  <div key={ex.id} className="flex-between" style={{ background: 'rgba(0,0,0,0.15)', padding: '0.65rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{ex.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR Anterior: {ex.prWeight > 0 ? `${ex.prWeight}kg` : 'Nenhum'}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input 
+                        type="number" 
+                        min="0"
+                        className="form-control" 
+                        style={{ width: '80px', height: '36px', textAlign: 'center', padding: '0.25rem' }}
+                        value={logWeights[ex.id] || ''}
+                        onChange={(e) => setLogWeights({
+                          ...logWeights,
+                          [ex.id]: Number(e.target.value)
+                        })}
+                        placeholder="kg"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsLogModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Registrar Treino Concluído</button>
               </div>
             </form>
           </div>
@@ -588,87 +770,28 @@ export const Workouts: React.FC = () => {
       {/* Modal Modelos/Templates */}
       {isTemplateModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px' }}>
+          <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Modelos de Ficha de Treino</h3>
+              <h3 className="modal-title">Escolha um Modelo de Treino</h3>
               <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsTemplateModalOpen(false)}>X</button>
             </div>
             <div className="modal-body">
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                Selecione um modelo pré-configurado para inicializar seu cronograma instantaneamente. Isso apagará sua lista de treinos atual!
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem', textAlign: 'left' }}>
+                Os templates pré-configurados preenchem sua planilha com treinos focados nos principais objetivos esportivos:
               </p>
-              
               <div className="template-grid">
-                <div className="template-card" onClick={() => loadDefaultTemplate('abc')}>
-                  <div className="template-card-title">Divisão ABC (Hipertrofia)</div>
-                  <div className="template-card-desc">Ficha padrão para 3 dias na semana. Peito/Tríceps, Costas/Bíceps e Pernas.</div>
+                <div className="template-card" onClick={() => handleTemplateSelection('hypertrophy')}>
+                  <div className="template-card-title">Treino ABC (Hipertrofia)</div>
+                  <div className="template-card-desc">Divisão clássica de Puxar (A), Empurrar (B) e Pernas (C) com exercícios compostos de alto volume.</div>
                 </div>
-
-                <div className="template-card" onClick={() => loadDefaultTemplate('power')}>
-                  <div className="template-card-title">Treino de Força (5x5)</div>
-                  <div className="template-card-desc">Focado em Levantamento Terra, Supino Reto e Agachamento Livre para ganho de força.</div>
+                <div className="template-card" onClick={() => handleTemplateSelection('power')}>
+                  <div className="template-card-title">Treino SL 5x5 (Força)</div>
+                  <div className="template-card-desc">Focado em ganho absoluto de força com agachamento livre, supino reto e terra.</div>
                 </div>
               </div>
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setIsTemplateModalOpen(false)}>Voltar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Iniciar/Concluir Treino (Lançar Log) */}
-      {isLogModalOpen && selectedWorkoutForLog && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Dumbbell size={20} color="var(--accent-emerald)" />
-                Registrar Execução: {selectedWorkoutForLog.name}
-              </h3>
-              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsLogModalOpen(false)}>X</button>
-            </div>
-            <div className="modal-body" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label htmlFor="logDate">Data da Execução</label>
-                <input
-                  id="logDate"
-                  type="date"
-                  className="form-control"
-                  value={logDate}
-                  onChange={(e) => setLogDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <h4 style={{ fontSize: '0.9rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>
-                Exercícios Realizados & Cargas
-              </h4>
-
-              {exercises.filter(e => e.workoutId === selectedWorkoutForLog.id).map(ex => (
-                <div key={ex.id} className="flex-between" style={{ padding: '0.75rem 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{ex.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR atual: {ex.prWeight}kg</div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <input
-                      type="number"
-                      min="0"
-                      className="form-control"
-                      style={{ width: '80px', padding: '0.4rem 0.6rem', textAlign: 'center' }}
-                      value={logWeights[ex.id] ?? 0}
-                      onChange={(e) => setLogWeights({ ...logWeights, [ex.id]: Number(e.target.value) })}
-                    />
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>kg</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setIsLogModalOpen(false)}>Cancelar</button>
-              <button type="button" className="btn btn-primary" onClick={handleSaveWorkoutLog}>Concluir & Salvar</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setIsTemplateModalOpen(false)}>Fechar</button>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+/* Workouts CSS */
 .workouts-header-actions {
   display: flex;
   gap: 0.75rem;
@@ -9,7 +10,7 @@
   display: flex;
   gap: 1rem;
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .workout-tab-btn {
@@ -30,7 +31,7 @@
 }
 
 .workout-tab-btn.active {
-  color: var(--accent-emerald);
+  color: var(--accent-blue);
 }
 
 .workout-tab-btn.active::after {
@@ -40,58 +41,199 @@
   left: 0;
   right: 0;
   height: 2px;
-  background-color: var(--accent-emerald);
-  box-shadow: 0 0 8px var(--accent-emerald);
+  background-color: var(--accent-blue);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
 }
 
-.workout-group-card {
-  margin-bottom: 2rem;
+/* Colapsáveis de Cardio e Observações */
+.collapsible-panel {
+  border-radius: var(--radius-md) !important;
+  border-color: var(--border-subtle);
+  padding: 0 !important;
+  overflow: hidden;
 }
 
-.workout-group-header {
+.collapsible-header {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: #141620;
+  border: none;
+  color: #fff;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
-.workout-group-title {
-  font-size: 1.35rem;
-  color: var(--text-primary);
+.collapsible-header:hover {
+  background: #1a1c27;
+}
+
+.collapsible-header .header-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
-.workout-group-badge {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--accent-emerald);
+.collapsible-content {
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+/* Grade de Treinos (Inspirado no Prime) */
+.workout-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.workout-card-premium {
+  padding: 0 !important;
+  overflow: hidden;
+  transition: var(--transition-smooth);
+  border-color: var(--border-subtle);
+  background: var(--bg-card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workout-card-premium:hover {
+  border-color: #2b2f44;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+.workout-card-premium.expanded {
+  border-color: #2a3b66;
+}
+
+.premium-card-main {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.premium-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.suggested-day {
   font-size: 0.75rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  font-weight: bold;
+  font-weight: 600;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.workout-muscles {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0.15rem 0 0.5rem 0;
+}
+
+.premium-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.team-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.team-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2b2f44;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  border: 1px solid var(--border-subtle);
+}
+
+.premium-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.workout-tag-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #1e202f;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Área de Exercícios da Planilha */
+.premium-card-exercises {
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--border-subtle);
+  padding: 1.5rem;
+  animation: slideDown 0.2s ease-out;
+}
+
+.exercises-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+}
+
+.no-exercises-text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1rem 0;
 }
 
 .exercise-pr-tag {
   color: var(--accent-gold);
   font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+  font-size: 0.85rem;
 }
 
 .exercise-notes {
   font-size: 0.8rem;
   color: var(--text-muted);
-  max-width: 200px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Formulário Inline / Modais */
+/* Modais e Cabeçalhos */
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -118,7 +260,7 @@
   background: rgba(0, 0, 0, 0.15);
 }
 
-/* Template Select Container */
+/* Modelos/Templates */
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -130,15 +272,15 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 1rem;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0,0,0,0.25);
   cursor: pointer;
   transition: var(--transition-smooth);
   text-align: left;
 }
 
 .template-card:hover {
-  border-color: var(--accent-emerald);
-  background: rgba(16, 185, 129, 0.05);
+  border-color: var(--accent-blue);
+  background: rgba(37, 99, 235, 0.05);
 }
 
 .template-card-title {
@@ -152,4 +294,26 @@
 .template-card-desc {
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+/* Animations */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .premium-card-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .premium-card-actions {
+    align-items: flex-start;
+    width: 100%;
+  }
+  .workout-tag-pill {
+    align-self: flex-start;
+  }
 }

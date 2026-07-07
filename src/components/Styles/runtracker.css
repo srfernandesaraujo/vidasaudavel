@@ -120,3 +120,35 @@
   color: var(--text-muted);
   margin-top: 0.15rem;
 }
+
+/* Filtros de Período Biométrico */
+.period-filter-pills {
+  display: flex;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.period-pill {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.period-pill:hover {
+  color: #fff;
+}
+
+.period-pill.active {
+  background: var(--accent-blue);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}

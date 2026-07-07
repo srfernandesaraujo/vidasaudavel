@@ -4,10 +4,13 @@ import {
   Dumbbell, 
   Footprints, 
   TrendingDown, 
-  Calendar, 
   ChevronRight, 
   Bot, 
-  HeartPulse 
+  HeartPulse,
+  Droplet,
+  Apple,
+  Sparkles,
+  Scale
 } from 'lucide-react';
 import './Styles/dashboard.css';
 
@@ -21,257 +24,400 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
   const runLogs = db.getRunLogs();
   const bodyCompLogs = db.getBodyCompLogs();
   const races = db.getRaces();
+  const workouts = db.getWorkouts();
 
-  // Cálculos de Resumo
-  const lastWorkout = useMemo(() => {
-    if (workoutLogs.length === 0) return null;
-    const last = workoutLogs[0];
-    const diffTime = Math.abs(new Date().getTime() - new Date(last.date).getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) - 1;
+  // 1. Cálculo de XP Real
+  const totalXP = useMemo(() => {
+    const workoutXP = workoutLogs.length * 150;
+    const runXP = runLogs.length * 500;
+    const raceXP = races.filter(r => r.isRegistered).length * 1000;
+    return 1500 + workoutXP + runXP + raceXP; // Base de 1500 XP
+  }, [workoutLogs, runLogs, races]);
+
+  // 2. Cálculo de Sequência (Streak) de Dias Consecutivos Ativos
+  const streakInfo = useMemo(() => {
+    if (workoutLogs.length === 0 && runLogs.length === 0) {
+      return { current: 0, record: 5 };
+    }
+
+    // Une todas as datas de logs (Musculação + Corrida)
+    const dates = new Set<string>();
+    workoutLogs.forEach(l => dates.add(l.date));
+    runLogs.forEach(l => dates.add(l.date));
+
+
+    let currentStreak = 0;
+    let recordStreak = 5; // Recorde padrão de teste
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // Verifica se treinou hoje ou ontem para começar a contar
+    let hasActivityRecently = dates.has(todayStr) || dates.has(yesterdayStr);
+    
+    if (hasActivityRecently) {
+      let checkDate = new Date();
+      // Se não treinou hoje mas treinou ontem, começa de ontem
+      if (!dates.has(todayStr)) {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+      
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (dates.has(dateStr)) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Calcula maior sequência histórica (simplificado)
+    let tempStreak = 0;
+    const allDatesAsc = Array.from(dates).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    let prevDate: Date | null = null;
+
+    allDatesAsc.forEach(dateStr => {
+      const currentDate = new Date(dateStr);
+      if (!prevDate) {
+        tempStreak = 1;
+      } else {
+        const diffTime = Math.abs(currentDate.getTime() - prevDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          tempStreak++;
+        } else if (diffDays > 1) {
+          if (tempStreak > recordStreak) {
+            recordStreak = tempStreak;
+          }
+          tempStreak = 1;
+        }
+      }
+      prevDate = currentDate;
+    });
+
+    if (tempStreak > recordStreak) {
+      recordStreak = tempStreak;
+    }
+
     return {
-      name: last.workoutName,
-      date: last.date.split('-').reverse().join('/'),
-      days: diffDays
+      current: currentStreak,
+      record: Math.max(recordStreak, currentStreak, 6)
     };
-  }, [workoutLogs]);
+  }, [workoutLogs, runLogs]);
 
-  const lastRun = useMemo(() => {
-    if (runLogs.length === 0) return null;
-    return runLogs[0];
-  }, [runLogs]);
+  // 3. Dias da Semana para o Calendário (Dom a Sáb da semana atual)
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Dom, 1 = Seg, ...
+    
+    const days = [];
+    const names = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    
+    // Obtém as datas de todos os logs da musculação e corrida para marcar com bolinhas
+    const loggedDates = new Set<string>();
+    workoutLogs.forEach(l => loggedDates.add(l.date));
+    runLogs.forEach(l => loggedDates.add(l.date));
 
-  const latestBody = useMemo(() => {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - currentDay + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const isToday = i === currentDay;
+      const hasLog = loggedDates.has(dateStr);
+
+      days.push({
+        name: names[i],
+        dayNum: d.getDate(),
+        isToday,
+        hasLog,
+        dateStr
+      });
+    }
+    return days;
+  }, [workoutLogs, runLogs]);
+
+  // 4. Determina o Treino de Hoje baseado no Dia da Semana
+  const todayWorkout = useMemo(() => {
+    if (workouts.length === 0) return null;
+    
+    const dayOfWeek = new Date().getDay(); // 0 = Dom, 1 = Seg...
+    
+    // Se for Fim de Semana (Dom = 0, Sáb = 6), sugere descanso ou Treino C se houver
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      if (workouts.length > 2) {
+        return {
+          label: 'HOJE • TREINO EXTRA',
+          name: workouts[2].name,
+          id: workouts[2].id,
+          exercisesCount: db.getExercises().filter(e => e.workoutId === workouts[2].id).length
+        };
+      }
+      return null;
+    }
+
+    // Segunda (1) -> Treino A (index 0)
+    // Terça (2) -> Treino B (index 1)
+    // Quarta (3) -> Treino A (index 0)
+    // Quinta (4) -> Treino B (index 1)
+    // Sexta (5) -> Treino A (index 0)
+    const idx = (dayOfWeek % 2 === 1) ? 0 : 1;
+    const activeWorkout = workouts[idx] || workouts[0];
+    
+    const exercisesCount = db.getExercises().filter(e => e.workoutId === activeWorkout.id).length;
+
+    return {
+      label: `HOJE • TREINO ${activeWorkout.name.replace('Treino ', '')}`,
+      name: activeWorkout.name,
+      id: activeWorkout.id,
+      exercisesCount
+    };
+  }, [workouts]);
+
+  // 5. Estatísticas de Peso e Variação
+  const weightStats = useMemo(() => {
     if (bodyCompLogs.length === 0) return null;
-    return bodyCompLogs[bodyCompLogs.length - 1];
+    const latest = bodyCompLogs[bodyCompLogs.length - 1];
+    const first = bodyCompLogs[0];
+    const diff = latest.weight - first.weight;
+    
+    let trend = 'Estável';
+    if (diff < -0.5) trend = 'Descendo';
+    else if (diff > 0.5) trend = 'Subindo';
+
+    return {
+      current: latest.weight,
+      diff: diff.toFixed(1),
+      trend,
+      ideal: latest.idealWeight
+    };
   }, [bodyCompLogs]);
 
-  const nextRace = useMemo(() => {
-    const registeredRaces = races.filter(r => r.isRegistered);
-    if (registeredRaces.length === 0) return null;
+  const bodyFatStats = useMemo(() => {
+    if (bodyCompLogs.length === 0) return null;
+    const latest = bodyCompLogs[bodyCompLogs.length - 1];
     
-    // Filtra corridas futuras
-    const nowTime = new Date().getTime();
-    const upcoming = registeredRaces.filter(r => new Date(r.date).getTime() >= nowTime);
-    
-    if (upcoming.length === 0) return null;
-    // Ordena por data mais próxima
-    upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    return upcoming[0];
-  }, [races]);
+    return {
+      current: latest.bodyFat,
+      goal: latest.bodyFatGoal
+    };
+  }, [bodyCompLogs]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <header className="dashboard-header">
-        <h1>Olá, {settings.userName}!</h1>
-        <p>Aqui está o resumo das suas atividades e composição corporal para hoje.</p>
-      </header>
-
-      {/* Grid de Estatísticas Rápidas */}
-      <section className="stats-grid">
-        {/* Musculação */}
-        <div className="glass-card stat-card stat-green">
-          <div className="stat-top">
-            <span>Último Treino</span>
-            <Dumbbell className="stat-icon" size={18} color="var(--accent-emerald)" />
+    <div className="dashboard-container">
+      {/* 1. Cabeçalho Azul Premium (Inspirado no Prime) */}
+      <section className="dashboard-header-card">
+        <div className="header-card-top">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="user-avatar-badge">
+              {settings.userName.split(' ').map(n => n[0]).slice(0,2).join('').toUpperCase()}
+            </div>
+            <div>
+              <h1 className="header-greeting">Olá, {settings.userName}!</h1>
+              <p className="header-subtitle">Pronto para mais um dia de evolução?</p>
+            </div>
           </div>
-          {lastWorkout ? (
-            <div>
-              <div className="stat-value">{lastWorkout.name}</div>
-              <div className="stat-desc">Realizado em {lastWorkout.date} ({lastWorkout.days} dias atrás)</div>
-            </div>
-          ) : (
-            <div>
-              <div className="stat-value">Sem Treinos</div>
-              <div className="stat-desc">Nenhum treino no histórico.</div>
-            </div>
-          )}
+          <div className="xp-pill">
+            <Sparkles size={14} />
+            <span>{totalXP} XP</span>
+          </div>
         </div>
 
-        {/* Corrida */}
-        <div className="glass-card stat-card stat-blue">
-          <div className="stat-top">
-            <span>Última Corrida</span>
-            <Footprints className="stat-icon" size={18} color="var(--accent-blue)" />
-          </div>
-          {lastRun ? (
-            <div>
-              <div className="stat-value">{lastRun.distance} km</div>
-              <div className="stat-desc">Pace de {lastRun.pace} min/km em {lastRun.date.split('-').reverse().join('/')}</div>
-            </div>
-          ) : (
-            <div>
-              <div className="stat-value">Sem Registros</div>
-              <div className="stat-desc">Nenhuma corrida registrada.</div>
-            </div>
-          )}
-        </div>
-
-        {/* Composição Corporal */}
-        <div className="glass-card stat-card stat-purple">
-          <div className="stat-top">
-            <span>Peso & Gordura</span>
-            <TrendingDown className="stat-icon" size={18} color="var(--accent-purple)" />
-          </div>
-          {latestBody ? (
-            <div>
-              <div className="stat-value">{latestBody.weight} kg</div>
-              <div className="stat-desc">{latestBody.bodyFat}% de gordura (Meta: {latestBody.bodyFatGoal}%)</div>
-            </div>
-          ) : (
-            <div>
-              <div className="stat-value">Sem Biometria</div>
-              <div className="stat-desc">Cadastre dados corporais.</div>
-            </div>
-          )}
-        </div>
-
-        {/* Próxima Corrida */}
-        <div className="glass-card stat-card stat-orange">
-          <div className="stat-top">
-            <span>Próxima Corrida</span>
-            <Calendar className="stat-icon" size={18} color="var(--accent-orange)" />
-          </div>
-          {nextRace ? (
-            <div>
-              <div className="stat-value" style={{ fontSize: '1.25rem', padding: '0.4rem 0' }}>
-                {nextRace.name.length > 25 ? nextRace.name.substring(0, 25) + '...' : nextRace.name}
+        <div className="header-card-row">
+          {/* Caixa de Sequência */}
+          <div className="streak-box">
+            <div className="streak-value-wrapper">
+              <span className="streak-fire-icon">🔥</span>
+              <div className="streak-numbers">
+                <div className="val">{streakInfo.current} {streakInfo.current === 1 ? 'dia' : 'dias'}</div>
+                <div className="lbl">MELHOR SEQUÊNCIA</div>
               </div>
-              <div className="stat-desc">{nextRace.distance} em {nextRace.date.split('-').reverse().join('/')}</div>
             </div>
-          ) : (
-            <div>
-              <div className="stat-value" style={{ fontSize: '1.25rem', padding: '0.4rem 0' }}>Nenhuma Prova</div>
-              <div className="stat-desc">Inscreva-se em corridas na aba.</div>
+            <div className="streak-record">Recorde atual: {streakInfo.record}</div>
+          </div>
+
+          {/* Quadro de trackings */}
+          <div className="trackings-board">
+            <div className="tracking-item">
+              <Droplet size={14} className="icon-blue" />
+              <span className="lbl">Água:</span>
+              <span className="val">2.5L / dia</span>
             </div>
-          )}
+            <div className="tracking-item">
+              <Apple size={14} className="icon-orange" />
+              <span className="lbl">Dieta:</span>
+              <span className="val">100% Saudável</span>
+            </div>
+            <div className="tracking-item">
+              <Dumbbell size={14} className="icon-green" />
+              <span className="lbl">Treinos:</span>
+              <span className="val">{workoutLogs.length} concluídos</span>
+            </div>
+            <div className="tracking-item">
+              <Footprints size={14} className="icon-purple" />
+              <span className="lbl">Cardio:</span>
+              <span className="val">{runLogs.length} corridas</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Linha Inferior: Painel de Progresso & Ações Rápidas */}
-      <div className="dashboard-row">
-        {/* Metas Corporais Atuais */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h2 className="dashboard-panel-title">
-            <TrendingDown size={20} color="var(--accent-purple)" />
-            Progresso de Metas Recentes
-          </h2>
-          
-          {latestBody ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1, justifyContent: 'center' }}>
-              <div>
-                <div className="flex-between" style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  <span>Controle de Peso</span>
-                  <span style={{ fontWeight: 600 }}>{latestBody.weight}kg / {latestBody.idealWeight}kg (Ideal)</span>
-                </div>
-                <div className="progress-bar-container">
-                  {/* Calcula progresso. Se peso atual é maior que ideal, mostra a proporção. */}
-                  <div 
-                    className="progress-bar-fill" 
-                    style={{ 
-                      width: `${Math.min(100, (latestBody.idealWeight / latestBody.weight) * 100)}%`,
-                      backgroundColor: 'var(--accent-purple)' 
-                    }}
-                  />
-                </div>
-              </div>
+      {/* 2. Calendário Semanal (Pills de Dias da Semana) */}
+      <section className="weekly-calendar-bar glass-card">
+        {weekDays.map((day, idx) => (
+          <div 
+            key={idx} 
+            className={`calendar-day-pill ${day.isToday ? 'active' : ''}`}
+            title={day.dateStr}
+          >
+            <span className="day-name">{day.name}</span>
+            <span className="day-num">{day.dayNum}</span>
+            {day.hasLog && <span className="day-dot"></span>}
+          </div>
+        ))}
+      </section>
 
-              <div>
-                <div className="flex-between" style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  <span>Percentual de Gordura</span>
-                  <span style={{ fontWeight: 600 }}>{latestBody.bodyFat}% / {latestBody.bodyFatGoal}% (Meta)</span>
-                </div>
-                <div className="progress-bar-container">
-                  <div 
-                    className="progress-bar-fill" 
-                    style={{ 
-                      width: `${Math.min(100, (latestBody.bodyFatGoal / latestBody.bodyFat) * 100)}%`,
-                      backgroundColor: 'var(--accent-blue)' 
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex-between" style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  <span>Massa Muscular</span>
-                  <span style={{ fontWeight: 600 }}>{latestBody.muscleMass}kg / {latestBody.muscleMassGoal}kg (Meta)</span>
-                </div>
-                <div className="progress-bar-container">
-                  <div 
-                    className="progress-bar-fill" 
-                    style={{ 
-                      width: `${Math.min(100, (latestBody.muscleMass / latestBody.muscleMassGoal) * 100)}%`,
-                      backgroundColor: 'var(--accent-emerald)' 
-                    }}
-                  />
-                </div>
-              </div>
+      {/* 3. Hoje / Treino Ativo de Hoje */}
+      {todayWorkout ? (
+        <section className="active-workout-section">
+          <div className="active-workout-card" onClick={() => setActiveTab('workouts')}>
+            <div className="workout-card-content">
+              <span className="workout-card-label">{todayWorkout.label}</span>
+              <h2 className="workout-card-title">{todayWorkout.name.toUpperCase()}</h2>
+              <p className="workout-card-desc">{todayWorkout.exercisesCount} exercícios cadastrados para hoje</p>
             </div>
-          ) : (
-            <div style={{ padding: '2rem 0', color: 'var(--text-secondary)', textAlign: 'center' }}>
-              Nenhum dado de bioimpedância cadastrado ainda. Vá na aba **Corrida & Corpo** e registre sua composição corporal!
-            </div>
-          )}
-        </div>
-
-        {/* Ações Rápidas */}
-        <div className="glass-card">
-          <h2 className="dashboard-panel-title">Ações Rápidas</h2>
-          <div className="quick-action-list">
-            <button className="quick-action-item" onClick={() => setActiveTab('workouts')}>
-              <div className="quick-action-info">
-                <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '8px', borderRadius: '8px' }}>
-                  <Dumbbell size={18} color="var(--accent-emerald)" />
-                </div>
-                <div>
-                  <div className="quick-action-title">Lançar Treino Executado</div>
-                  <div className="quick-action-subtitle">Registrar série muscular concluída</div>
-                </div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
-            </button>
-
-            <button className="quick-action-item" onClick={() => setActiveTab('runtracker')}>
-              <div className="quick-action-info">
-                <div style={{ background: 'rgba(0, 229, 255, 0.15)', padding: '8px', borderRadius: '8px' }}>
-                  <Footprints size={18} color="var(--accent-blue)" />
-                </div>
-                <div>
-                  <div className="quick-action-title">Registrar Corrida / Biometria</div>
-                  <div className="quick-action-subtitle">Gravar progresso aeróbico e corporal</div>
-                </div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
-            </button>
-
-            <button className="quick-action-item" onClick={() => setActiveTab('aicoach')}>
-              <div className="quick-action-info">
-                <div style={{ background: 'rgba(138, 43, 226, 0.15)', padding: '8px', borderRadius: '8px' }}>
-                  <Bot size={18} color="var(--accent-purple)" />
-                </div>
-                <div>
-                  <div className="quick-action-title">Falar com o Treinador IA</div>
-                  <div className="quick-action-subtitle">Dúvidas, treinos e orientações</div>
-                </div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
-            </button>
-
-            <button className="quick-action-item" onClick={() => setActiveTab('aianalyzer')}>
-              <div className="quick-action-info">
-                <div style={{ background: 'rgba(255, 107, 74, 0.15)', padding: '8px', borderRadius: '8px' }}>
-                  <HeartPulse size={18} color="var(--accent-orange)" />
-                </div>
-                <div>
-                  <div className="quick-action-title">Análise de Saúde IA</div>
-                  <div className="quick-action-subtitle">Verificar riscos e exames sugeridos</div>
-                </div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
+            <button className="workout-card-btn">
+              <span>Ver treino</span>
+              <ChevronRight size={18} />
             </button>
           </div>
+        </section>
+      ) : (
+        <section className="active-workout-section">
+          <div className="active-workout-card rest-day" onClick={() => setActiveTab('workouts')}>
+            <div className="workout-card-content">
+              <span className="workout-card-label">HOJE • RECURSO</span>
+              <h2 className="workout-card-title">DIA DE DESCANSO</h2>
+              <p className="workout-card-desc">Aproveite para regenerar sua massa muscular e hidratar-se!</p>
+            </div>
+            <button className="workout-card-btn">
+              <span>Ver ficha</span>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 4. Progresso Rápido de Biometria */}
+      <section className="progress-section">
+        <h3 className="section-title-small">Seu Progresso Recente</h3>
+        <div className="progress-cards-grid">
+          {/* Card Peso */}
+          <div className="glass-card progress-mini-card" onClick={() => setActiveTab('runtracker')}>
+            <div className="mini-card-top-icon">
+              <Scale size={18} className="icon-blue" />
+              <ChevronRight size={16} className="arrow-right-icon" />
+            </div>
+            {weightStats ? (
+              <div className="mini-card-info-block">
+                <div className="value-row">
+                  <span className="val">{weightStats.current} <span className="unit">kg</span></span>
+                  <span className={`trend-tag ${weightStats.trend === 'Descendo' ? 'green' : 'orange'}`}>
+                    {weightStats.diff.startsWith('-') ? '' : '+'}{weightStats.diff}kg
+                  </span>
+                </div>
+                <div className="desc-row">
+                  <span>Peso corporal (Ideal: {weightStats.ideal}kg)</span>
+                  <span className="trend-lbl">{weightStats.trend}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mini-card-info-block">
+                <div className="value-row">Sem dados</div>
+                <div className="desc-row">Registre sua biometria na aba Corrida & Corpo</div>
+              </div>
+            )}
+          </div>
+
+          {/* Card Gordura */}
+          <div className="glass-card progress-mini-card" onClick={() => setActiveTab('runtracker')}>
+            <div className="mini-card-top-icon">
+              <TrendingDown size={18} className="icon-purple" />
+              <ChevronRight size={16} className="arrow-right-icon" />
+            </div>
+            {bodyFatStats ? (
+              <div className="mini-card-info-block">
+                <div className="value-row">
+                  <span className="val">{bodyFatStats.current} <span className="unit">%</span></span>
+                  <span className="trend-tag purple">Estável</span>
+                </div>
+                <div className="desc-row">
+                  <span>Gordura corporal (Meta: {bodyFatStats.goal}%)</span>
+                  <span className="trend-lbl">Atlética</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mini-card-info-block">
+                <div className="value-row">Sem dados</div>
+                <div className="desc-row">Registre sua biometria na aba Corrida & Corpo</div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* 5. Ações Rápidas (Abaixo, Estilizado) */}
+      <section className="quick-actions-section">
+        <h3 className="section-title-small">Ações Rápidas</h3>
+        <div className="quick-actions-grid">
+          <button className="quick-btn glass-card" onClick={() => setActiveTab('workouts')}>
+            <div className="icon-wrapper green-bg">
+              <Dumbbell size={18} color="var(--accent-emerald)" />
+            </div>
+            <div className="text-wrapper">
+              <span className="title">Lançar Treino Executado</span>
+              <span className="subtitle">Registrar série muscular concluída</span>
+            </div>
+            <ChevronRight size={16} className="arrow" />
+          </button>
+
+          <button className="quick-btn glass-card" onClick={() => setActiveTab('runtracker')}>
+            <div className="icon-wrapper blue-bg">
+              <Footprints size={18} color="var(--accent-blue)" />
+            </div>
+            <div className="text-wrapper">
+              <span className="title">Registrar Corrida / Biometria</span>
+              <span className="subtitle">Gravar progresso aeróbico e corporal</span>
+            </div>
+            <ChevronRight size={16} className="arrow" />
+          </button>
+
+          <button className="quick-btn glass-card" onClick={() => setActiveTab('aicoach')}>
+            <div className="icon-wrapper purple-bg">
+              <Bot size={18} color="var(--accent-purple)" />
+            </div>
+            <div className="text-wrapper">
+              <span className="title">Falar com o Treinador IA</span>
+              <span className="subtitle">Dúvidas, treinos e orientações</span>
+            </div>
+            <ChevronRight size={16} className="arrow" />
+          </button>
+
+          <button className="quick-btn glass-card" onClick={() => setActiveTab('aianalyzer')}>
+            <div className="icon-wrapper orange-bg">
+              <HeartPulse size={18} color="var(--accent-orange)" />
+            </div>
+            <div className="text-wrapper">
+              <span className="title">Análise de Saúde IA</span>
+              <span className="subtitle">Verificar riscos e exames sugeridos</span>
+            </div>
+            <ChevronRight size={16} className="arrow" />
+          </button>
+        </div>
+      </section>
     </div>
   );
 };

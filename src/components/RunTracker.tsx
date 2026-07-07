@@ -189,8 +189,25 @@ export const RunTracker: React.FC = () => {
   };
 
   // -------------------------------------------------------------
-  // CONFIGURAÇÃO DOS GRÁFICOS (CHART.JS)
+  // CONFIGURAÇÃO E FILTRO DE GRÁFICOS (CHART.JS)
   // -------------------------------------------------------------
+  const [periodFilter, setPeriodFilter] = useState<'7D' | '1M' | '3M' | '6M' | '1A' | 'ALL'>('ALL');
+
+  const filteredBodyLogs = useMemo(() => {
+    if (periodFilter === 'ALL') return bodyCompLogs;
+    
+    const now = new Date();
+    const cutoff = new Date();
+    if (periodFilter === '7D') cutoff.setDate(now.getDate() - 7);
+    else if (periodFilter === '1M') cutoff.setDate(now.getDate() - 30);
+    else if (periodFilter === '3M') cutoff.setDate(now.getDate() - 90);
+    else if (periodFilter === '6M') cutoff.setDate(now.getDate() - 180);
+    else if (periodFilter === '1A') cutoff.setDate(now.getDate() - 365);
+    
+    // Filtra comparando a data ISO (YYYY-MM-DD)
+    return bodyCompLogs.filter(log => new Date(log.date) >= cutoff);
+  }, [bodyCompLogs, periodFilter]);
+
   const chartOptions = (_titleStr: string, yLabel: string): ChartOptions<'line'> => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -198,56 +215,56 @@ export const RunTracker: React.FC = () => {
       legend: {
         position: 'top' as const,
         labels: {
-          color: '#9ea4b5',
+          color: '#9ba1b0',
           font: { family: 'Inter', size: 11 }
         }
       },
       tooltip: {
-        backgroundColor: '#12141c',
+        backgroundColor: '#141620',
         titleColor: '#ffffff',
         bodyColor: '#e2e8f0',
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: '#1f2232',
         borderWidth: 1
       }
     },
     scales: {
       x: {
-        grid: { color: 'rgba(255, 255, 255, 0.03)' },
-        ticks: { color: '#5e6475', font: { family: 'Inter', size: 10 } }
+        grid: { color: 'rgba(255, 255, 255, 0.02)' },
+        ticks: { color: '#535868', font: { family: 'Inter', size: 10 } }
       },
       y: {
-        grid: { color: 'rgba(255, 255, 255, 0.03)' },
-        ticks: { color: '#5e6475', font: { family: 'Inter', size: 10 } },
+        grid: { color: 'rgba(255, 255, 255, 0.02)' },
+        ticks: { color: '#535868', font: { family: 'Inter', size: 10 } },
         title: {
           display: true,
           text: yLabel,
-          color: '#5e6475',
+          color: '#535868',
           font: { family: 'Inter', size: 10 }
         }
       }
     }
   });
 
-  // Gráficos Data Mappers
-  const dates = bodyCompLogs.map(log => log.date.split('-').reverse().slice(0, 2).join('/')); // ex: DD/MM
+  // Gráficos Data Mappers usando os dados filtrados
+  const dates = filteredBodyLogs.map(log => log.date.split('-').reverse().slice(0, 2).join('/')); // DD/MM
 
   const weightChartData = {
     labels: dates,
     datasets: [
       {
         label: 'Peso Atual (kg)',
-        data: bodyCompLogs.map(log => log.weight),
-        borderColor: '#8a2be2',
-        backgroundColor: 'rgba(138, 43, 226, 0.1)',
-        tension: 0.3,
+        data: filteredBodyLogs.map(log => log.weight),
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+        tension: 0.4,
         fill: true,
-        pointBackgroundColor: '#8a2be2',
+        pointBackgroundColor: '#2563eb',
         pointRadius: 4
       },
       {
         label: 'Peso Ideal (Meta)',
-        data: bodyCompLogs.map(log => log.idealWeight),
-        borderColor: '#ffd700',
+        data: filteredBodyLogs.map(log => log.idealWeight),
+        borderColor: '#535868',
         borderDash: [5, 5],
         fill: false,
         pointRadius: 0
@@ -260,18 +277,18 @@ export const RunTracker: React.FC = () => {
     datasets: [
       {
         label: 'Gordura Corporal (%)',
-        data: bodyCompLogs.map(log => log.bodyFat),
-        borderColor: '#00e5ff',
-        backgroundColor: 'rgba(0, 229, 255, 0.1)',
-        tension: 0.3,
+        data: filteredBodyLogs.map(log => log.bodyFat),
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+        tension: 0.4,
         fill: true,
-        pointBackgroundColor: '#00e5ff',
+        pointBackgroundColor: '#3b82f6',
         pointRadius: 4
       },
       {
         label: 'Meta de Gordura',
-        data: bodyCompLogs.map(log => log.bodyFatGoal),
-        borderColor: '#ff6b4a',
+        data: filteredBodyLogs.map(log => log.bodyFatGoal),
+        borderColor: '#f97316',
         borderDash: [5, 5],
         fill: false,
         pointRadius: 0
@@ -284,18 +301,18 @@ export const RunTracker: React.FC = () => {
     datasets: [
       {
         label: 'Massa Muscular (kg)',
-        data: bodyCompLogs.map(log => log.muscleMass),
+        data: filteredBodyLogs.map(log => log.muscleMass),
         borderColor: '#10b981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        tension: 0.3,
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        tension: 0.4,
         fill: true,
         pointBackgroundColor: '#10b981',
         pointRadius: 4
       },
       {
         label: 'Meta de Massa Muscular',
-        data: bodyCompLogs.map(log => log.muscleMassGoal),
-        borderColor: '#c084fc',
+        data: filteredBodyLogs.map(log => log.muscleMassGoal),
+        borderColor: '#a78bfa',
         borderDash: [5, 5],
         fill: false,
         pointRadius: 0
@@ -308,17 +325,17 @@ export const RunTracker: React.FC = () => {
     datasets: [
       {
         label: 'Gordura Visceral',
-        data: bodyCompLogs.map(log => log.visceralFat),
-        borderColor: '#ff6b4a',
-        backgroundColor: 'rgba(255, 107, 74, 0.1)',
-        tension: 0.3,
+        data: filteredBodyLogs.map(log => log.visceralFat),
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.08)',
+        tension: 0.4,
         fill: true,
-        pointBackgroundColor: '#ff6b4a',
+        pointBackgroundColor: '#f97316',
         pointRadius: 4
       },
       {
         label: 'Meta de Visceral',
-        data: bodyCompLogs.map(log => log.visceralFatGoal),
+        data: filteredBodyLogs.map(log => log.visceralFatGoal),
         borderColor: '#10b981',
         borderDash: [5, 5],
         fill: false,
@@ -519,11 +536,27 @@ export const RunTracker: React.FC = () => {
           {/* Seção de Gráficos de Progressão */}
           {bodyCompLogs.length > 0 && (
             <div style={{ marginBottom: '2rem' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <TrendingUp size={20} color="var(--accent-blue)" />
-                Gráficos de Evolução Corporal
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Acompanhamento de peso, gordura, massa muscular e gordura visceral ao longo do tempo.</p>
+              <div className="flex-between" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ textAlign: 'left' }}>
+                  <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <TrendingUp size={20} color="var(--accent-blue)" />
+                    Gráficos de Evolução Corporal
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Acompanhamento de peso, gordura, massa muscular e gordura visceral.</p>
+                </div>
+                <div className="period-filter-pills">
+                  {(['7D', '1M', '3M', '6M', '1A', 'ALL'] as const).map(p => (
+                    <button 
+                      key={p}
+                      type="button"
+                      className={`period-pill ${periodFilter === p ? 'active' : ''}`}
+                      onClick={() => setPeriodFilter(p)}
+                    >
+                      {p === 'ALL' ? 'Todos' : p}
+                    </button>
+                  ))}
+                </div>
+              </div>
               
               <div className="charts-grid">
                 <div className="chart-container-card glass-card">
