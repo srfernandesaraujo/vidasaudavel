@@ -22,12 +22,22 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Corpo / Torso base */}
-          <path d="M20,10 L80,10 L85,40 L70,80 L30,80 L15,40 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          <path d="M50,10 L50,80" stroke="#4e5366" strokeWidth="1" strokeDasharray="2,2" />
-          {/* Peito Esquerdo e Direito */}
-          <path d="M25,20 C35,20 45,22 48,32 C42,42 32,45 23,38 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M75,20 C65,20 55,22 52,32 C58,42 68,45 77,38 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Frontal Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          {/* Peito Base */}
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Peitoral */}
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M50,22 C59,22 64,25 64,36 C64,46 59,52 50,52 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="22" x2="50" y2="52" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     },
@@ -37,12 +47,22 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Dorso base */}
-          <path d="M20,10 L80,10 L75,45 L65,80 L35,80 L25,45 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Asas laterais (Costas) */}
-          <path d="M21,12 L35,12 L30,65 L26,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M79,12 L65,12 L70,65 L74,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M35,15 L50,5 L65,15 L50,75 Z" fill="none" stroke="#4e5366" strokeWidth="1" />
+          {/* Silhueta Base Traseira Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Corpo / Costas Base */}
+          <path d="M50,15 L36,30 C34,42 37,60 41,75 L59,75 C63,60 66,42 64,30 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights da Dorsal (Asas) */}
+          <path d="M36,30 C34,42 37,60 41,75 L50,75 L50,45 C41,45 36,36 36,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M64,30 C66,42 63,60 59,75 L50,75 L50,45 C59,45 64,36 64,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="20" x2="50" y2="75" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     },
@@ -52,10 +72,19 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          <path d="M30,30 L70,30 L80,60 L60,85 L40,85 L20,60 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
+          {/* Silhueta Base Traseira Superior */}
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Costas / Tronco Base */}
+          <path d="M50,15 L36,30 C34,42 37,60 41,75 L59,75 C63,60 66,42 64,30 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
           {/* Pescoço e Trapézio superior */}
-          <path d="M38,30 C42,20 45,10 50,10 C55,10 58,20 62,30 Z" fill="none" stroke="#4e5366" strokeWidth="1.5" />
-          <path d="M38,30 L50,15 L62,30 L70,42 L50,45 L30,42 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M42,20 L58,20 L64,30 L50,45 L36,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="12" x2="50" y2="45" stroke="#12141c" strokeWidth="1" />
         </svg>
       )
     },
@@ -65,10 +94,18 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          <path d="M30,15 L70,15 L85,45 L70,80 L30,80 L15,45 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Ombros (Deltóides laterais) */}
-          <path d="M15,45 C12,30 20,20 28,17 C26,28 22,38 18,44 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M85,45 C88,30 80,20 72,17 C74,28 78,38 82,44 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Frontal Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Deltóide (Ombro Esquerdo e Direito) */}
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
         </svg>
       )
     },
@@ -78,11 +115,18 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Braço base */}
-          <path d="M30,10 L70,10 L75,85 L25,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Bíceps */}
-          <path d="M35,25 C35,15 65,15 65,25 C65,45 35,45 35,25" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M35,40 L65,40" stroke="#4e5366" strokeWidth="1.5" />
+          {/* Silhueta Base Frontal Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Bíceps */}
+          <path d="M25,33 C22,40 20,48 24,54 C27,51 28,42 25,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M75,33 C78,40 80,48 76,54 C73,51 72,42 75,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
         </svg>
       )
     },
@@ -92,10 +136,17 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          <path d="M30,10 L70,10 L75,85 L25,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Tríceps */}
-          <path d="M28,20 C28,45 42,50 42,20 C42,10 28,10 28,20" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M72,20 C72,45 58,50 58,20 C58,10 72,10 72,20" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Traseira Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M50,15 L36,30 C34,42 37,60 41,75 L59,75 C63,60 66,42 64,30 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Tríceps (Costas do braço) */}
+          <path d="M25,33 C22,40 20,48 24,54 C27,51 28,42 25,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M75,33 C78,40 80,48 76,54 C73,51 72,42 75,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
         </svg>
       )
     },
@@ -105,11 +156,18 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Antebraço base */}
-          <path d="M35,10 C45,10 55,10 65,10 L58,85 C53,85 47,85 42,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Músculo braquiorradial/extensores do antebraço */}
-          <path d="M36,15 C40,45 48,65 42,80 C36,45 35,25 36,15 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M64,15 C60,45 52,65 58,80 C64,45 65,25 64,15 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Frontal Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Antebraço */}
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
         </svg>
       )
     },
@@ -119,14 +177,30 @@ export const MuscleMap: React.FC = () => {
       type: 'Superior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          <path d="M25,10 L75,10 L70,85 L30,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Reto abdominal (Six pack) */}
-          <path d="M38,20 L62,20 L60,75 L40,75 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          {/* Linhas transversas para simular gomos */}
-          <line x1="38" y1="35" x2="62" y2="35" stroke="#12141c" strokeWidth="2" />
-          <line x1="38" y1="50" x2="62" y2="50" stroke="#12141c" strokeWidth="2" />
-          <line x1="38" y1="65" x2="62" y2="65" stroke="#12141c" strokeWidth="2" />
-          <line x1="50" y1="20" x2="50" y2="75" stroke="#12141c" strokeWidth="1" />
+          {/* Silhueta Base Frontal Superior */}
+          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Abs Outline do Abdomem */}
+          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Abdomem (Gomos / Six Pack) */}
+          <g fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }}>
+            <rect x="41" y="55" width="8" height="7" rx="1.5" />
+            <rect x="51" y="55" width="8" height="7" rx="1.5" />
+            <rect x="41" y="64" width="8" height="7" rx="1.5" />
+            <rect x="51" y="64" width="8" height="7" rx="1.5" />
+            <rect x="41" y="73" width="8" height="7" rx="1.5" />
+            <rect x="51" y="73" width="8" height="7" rx="1.5" />
+            <path d="M37,52 L40,82 L37,82 Z" />
+            <path d="M63,52 L60,82 L63,82 Z" />
+          </g>
         </svg>
       )
     },
@@ -136,11 +210,21 @@ export const MuscleMap: React.FC = () => {
       type: 'Inferior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Coxas frente */}
-          <path d="M15,10 L85,10 L75,85 L25,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Coxa esquerda e direita (Quadríceps) */}
-          <path d="M22,15 C33,15 45,20 45,55 C38,80 30,80 25,65 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M78,15 C67,15 55,20 55,55 C62,80 70,80 75,65 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Perna Frontal */}
+          <path d="M30,5 L70,5 L74,20 L26,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <circle cx="36" cy="78" r="3.5" fill="#1b1d26" stroke="#333846" />
+          <circle cx="64" cy="78" r="3.5" fill="#1b1d26" stroke="#333846" />
+          <path d="M33,81 L31,98 L37,98 L37,81 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M67,81 L69,98 L63,98 L63,81 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Coxas Base */}
+          <path d="M26,20 C26,38 32,58 35,75 L49,75 L45,20 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          <path d="M74,20 C74,38 68,58 65,75 L51,75 L55,20 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Quadríceps (Frente da Coxa) */}
+          <path d="M26,20 C26,38 32,58 35,75 L49,75 L45,20 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M74,20 C74,38 68,58 65,75 L51,75 L55,20 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="20" x2="50" y2="75" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     },
@@ -150,11 +234,20 @@ export const MuscleMap: React.FC = () => {
       type: 'Inferior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Quadris traseira */}
-          <path d="M20,10 L80,10 L75,80 L25,80 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Glúteo máximo */}
-          <path d="M23,30 C30,22 48,25 48,55 C45,70 30,75 25,60 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M77,30 C70,22 52,25 52,55 C55,70 70,75 75,60 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Perna Traseira */}
+          <path d="M30,5 L70,5 L72,20 L28,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M28,40 C28,52 32,68 36,78 L48,78 L48,40 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M72,40 C72,52 68,68 64,78 L52,78 L52,40 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M36,78 C32,82 34,90 36,98 L44,98 L44,78 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,78 C68,82 66,90 64,98 L56,98 L56,78 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Quadris base */}
+          <path d="M28,20 C28,32 38,40 50,40 C62,40 72,32 72,20 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights dos Glúteos */}
+          <path d="M28,20 C28,32 38,40 50,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M72,20 C72,32 62,40 50,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="20" x2="50" y2="40" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     },
@@ -164,11 +257,20 @@ export const MuscleMap: React.FC = () => {
       type: 'Inferior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Coxas traseira */}
-          <path d="M15,10 L85,10 L75,85 L25,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Isquiotibiais (Posteriores) */}
-          <path d="M24,15 C32,15 44,18 42,70 C36,80 28,80 26,60 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M76,15 C68,15 56,18 58,70 C64,80 72,80 74,60 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Perna Traseira */}
+          <path d="M30,5 L70,5 L72,20 L28,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M28,20 C28,32 38,40 50,40 C62,40 72,32 72,20 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M36,78 C32,82 34,90 36,98 L44,98 L44,78 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M64,78 C68,82 66,90 64,98 L56,98 L56,78 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Coxas Traseira Base */}
+          <path d="M28,40 C28,52 32,68 36,78 L49,78 L45,40 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          <path d="M72,40 C72,52 68,68 64,78 L51,78 L55,40 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights do Posterior (Isquiotibiais) */}
+          <path d="M28,40 C28,52 32,68 36,78 L49,78 L45,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M72,40 C72,52 68,68 64,78 L51,78 L55,40 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="40" x2="50" y2="78" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     },
@@ -178,11 +280,20 @@ export const MuscleMap: React.FC = () => {
       type: 'Inferior',
       svg: (fill, opacity, active) => (
         <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Canela/panturrilha base */}
-          <path d="M30,10 C40,10 60,10 70,10 L60,85 C55,85 45,85 40,85 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.5" />
-          {/* Músculo Gastrocnêmio (Panturrilha lateral e interna) */}
-          <path d="M34,15 C30,30 42,45 44,50 C46,40 42,20 34,15 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
-          <path d="M66,15 C70,30 58,45 56,50 C54,40 56,20 66,15 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 4px var(--accent-emerald))' : 'none' }} />
+          {/* Silhueta Base Perna Traseira */}
+          <path d="M30,5 L70,5 L72,20 L28,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
+          <path d="M28,20 C28,32 38,40 50,40 C62,40 72,32 72,20 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M28,40 C28,52 32,68 36,78 L49,78 L45,40 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          <path d="M72,40 C72,52 68,68 64,78 L51,78 L55,40 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
+          
+          {/* Panturrilha Base */}
+          <path d="M36,78 C32,82 34,90 36,98 L48,98 L44,78 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          <path d="M64,78 C68,82 66,90 64,98 L52,98 L56,78 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
+          
+          {/* Highlights da Panturrilha (Gastrocnêmio / Gêmeos) */}
+          <path d="M36,78 C32,82 34,90 36,98 L48,98 L44,78 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <path d="M64,78 C68,82 66,90 64,98 L52,98 L56,78 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
+          <line x1="50" y1="78" x2="50" y2="98" stroke="#12141c" strokeWidth="1.5" />
         </svg>
       )
     }
