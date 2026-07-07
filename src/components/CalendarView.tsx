@@ -303,7 +303,25 @@ export const CalendarView: React.FC = () => {
               const [rYear, rMonth, rDay] = race.date.split('-');
 
               return (
-                <div key={race.id} className="race-card">
+                <div key={race.id} className={`race-card ${race.isRecommended ? 'race-card-recommended' : ''}`}>
+                  {race.isRecommended && (
+                    <div style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: 'var(--accent-blue)',
+                      background: 'rgba(37, 99, 235, 0.1)',
+                      border: '1px solid rgba(37, 99, 235, 0.25)',
+                      padding: '0.15rem 0.4rem',
+                      borderRadius: '4px',
+                      alignSelf: 'flex-start',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.2rem',
+                      marginBottom: '0.15rem'
+                    }}>
+                      <span>⭐ Recomendada na sua Região</span>
+                    </div>
+                  )}
                   <div className="race-card-top">
                     <span className="race-card-title">{race.name}</span>
                     <button 

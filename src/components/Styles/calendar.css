@@ -183,3 +183,13 @@
   font-size: 0.65rem;
   color: var(--text-secondary);
 }
+
+.race-card.race-card-recommended {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.03);
+}
+
+.race-card.race-card-recommended:hover {
+  border-color: var(--accent-blue);
+  background: rgba(37, 99, 235, 0.06);
+}
