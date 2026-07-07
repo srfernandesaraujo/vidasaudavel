@@ -154,7 +154,7 @@ export const Settings: React.FC = () => {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', background: 'rgba(0, 229, 255, 0.05)', border: '1px solid rgba(0, 229, 255, 0.15)', padding: '0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', color: '#88eaff' }}>
               <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
               <span style={{ textAlign: 'left' }}>
-                <strong>Segurança de Dados:</strong> Sua chave de API é salva estritamente no seu computador local (`localStorage`) e as conexões com as APIs do Gemini ou OpenAI são executadas diretamente do seu navegador. Nenhum servidor intermediário retém seus dados.
+                <strong>Sincronização & Portabilidade:</strong> Sua chave de API é salva de forma criptografada na sua conta de banco de dados na nuvem (Firestore) e no seu dispositivo local. Desta forma, ao fazer login em outros dispositivos ou no trabalho, as configurações da IA e chave serão carregadas automaticamente, com requisições diretas de IA a partir de seu navegador sem intermediários.
               </span>
             </div>
           )}
