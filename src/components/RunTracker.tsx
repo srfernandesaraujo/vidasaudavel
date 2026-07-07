@@ -42,6 +42,60 @@ export const RunTracker: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'runs' | 'bodycomp'>('runs');
   const [runLogs, setRunLogs] = useState<RunLog[]>(db.getRunLogs());
   const [bodyCompLogs, setBodyCompLogs] = useState<BodyCompLog[]>(db.getBodyCompLogs());
+
+  // Configurações do perfil e zonas cardíacas
+  const settings = db.getSettings();
+  const age = settings.age || 30;
+  const rhr = settings.restingHeartRate || 60;
+  
+  // Fórmula de Karvonen
+  const mhr = 220 - age;
+  const hrr = mhr - rhr;
+
+  const hrZones = useMemo(() => {
+    return {
+      z1: { min: Math.round(rhr + 0.50 * hrr), max: Math.round(rhr + 0.60 * hrr) },
+      z2: { min: Math.round(rhr + 0.60 * hrr), max: Math.round(rhr + 0.70 * hrr) },
+      z3: { min: Math.round(rhr + 0.70 * hrr), max: Math.round(rhr + 0.80 * hrr) },
+      z4: { min: Math.round(rhr + 0.80 * hrr), max: Math.round(rhr + 0.90 * hrr) },
+      z5: { min: Math.round(rhr + 0.90 * hrr), max: mhr }
+    };
+  }, [age, rhr, hrr, mhr]);
+
+  // Fórmula de Riegel para estimativa de tempos de corrida
+  const referenceRun = useMemo(() => {
+    if (!runLogs || runLogs.length === 0) {
+      return { distance: 5.0, time: 25.0, isDefault: true }; // Padrão: 5k em 25min
+    }
+    // Seleciona a corrida com maior distância como base confiável
+    const sortedByDist = [...runLogs].sort((a, b) => b.distance - a.distance);
+    const best = sortedByDist[0];
+    return { distance: best.distance, time: best.time, isDefault: false };
+  }, [runLogs]);
+
+  const riegelProjections = useMemo(() => {
+    const { distance: d1, time: t1 } = referenceRun;
+    const project = (d2: number) => t1 * Math.pow(d2 / d1, 1.06);
+
+    return [
+      { name: '5 km', dist: 5.0, time: project(5.0) },
+      { name: '10 km', dist: 10.0, time: project(10.0) },
+      { name: 'Meia Maratona (21.1k)', dist: 21.1, time: project(21.1) },
+      { name: 'Maratona (42.2k)', dist: 42.2, time: project(42.2) }
+    ];
+  }, [referenceRun]);
+
+  const formatProjectedTime = (minutesDecimal: number) => {
+    const totalSeconds = Math.round(minutesDecimal * 60);
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    
+    if (hrs > 0) {
+      return `${hrs}h ${mins.toString().padStart(2, '0')}m`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')} min`;
+  };
   
   // Modais
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
@@ -344,6 +398,87 @@ export const RunTracker: React.FC = () => {
     ]
   };
 
+  // Gráficos de Performance de Corrida (Pace vs FC Média)
+  const runDates = runLogs.map(r => r.date.split('-').reverse().slice(0, 2).join('/'));
+
+  const runPerformanceChartData = {
+    labels: runDates,
+    datasets: [
+      {
+        label: 'Pace Médio (min/km)',
+        data: runLogs.map(r => r.pace),
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.05)',
+        tension: 0.4,
+        yAxisID: 'y',
+        fill: true,
+        pointBackgroundColor: '#2563eb',
+        pointRadius: 4
+      },
+      {
+        label: 'FC Média (bpm)',
+        data: runLogs.map(r => r.heartRate > 0 ? r.heartRate : null),
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+        tension: 0.4,
+        yAxisID: 'y1',
+        fill: true,
+        pointBackgroundColor: '#ef4444',
+        pointRadius: 4
+      }
+    ]
+  };
+
+  const runChartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: { color: '#9ba1b0', font: { family: 'Inter', size: 11 } }
+      },
+      tooltip: {
+        backgroundColor: '#141620',
+        titleColor: '#ffffff',
+        bodyColor: '#e2e8f0',
+        borderColor: '#1f2232',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255, 255, 255, 0.02)' },
+        ticks: { color: '#535868', font: { family: 'Inter', size: 10 } }
+      },
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        grid: { color: 'rgba(255, 255, 255, 0.02)' },
+        ticks: { color: '#2563eb', font: { family: 'Inter', size: 10 } },
+        title: {
+          display: true,
+          text: 'Pace (min/km)',
+          color: '#2563eb',
+          font: { family: 'Inter', size: 10, weight: 'bold' }
+        }
+      },
+      y1: {
+        type: 'linear' as const,
+        display: true,
+        position: 'right' as const,
+        grid: { drawOnChartArea: false },
+        ticks: { color: '#ef4444', font: { family: 'Inter', size: 10 } },
+        title: {
+          display: true,
+          text: 'Frequência Cardíaca (bpm)',
+          color: '#ef4444',
+          font: { family: 'Inter', size: 10, weight: 'bold' }
+        }
+      }
+    }
+  };
+
   // Últimas métricas de bioimpedância para resumos rápidos
   const latestComp = useMemo(() => {
     if (bodyCompLogs.length === 0) return null;
@@ -425,6 +560,116 @@ export const RunTracker: React.FC = () => {
               <div className="metric-mini-subtitle">Energia Consumida</div>
             </div>
           </div>
+
+          {/* Sessão Premium de Zonas e Projeções */}
+          <div className="cardio-premium-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            {/* Zonas de Esforço Cardíaco */}
+            <div className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontWeight: 600 }}>
+                <Heart size={18} color="#ff6b6b" />
+                Zonas de Esforço Cardíaco (Karvonen)
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
+                Calculado com FCR de {rhr} bpm e FCM de {mhr} bpm.
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Z1 - Regenerativo (50-60%)</span>
+                    <span>{hrZones.z1.min} - {hrZones.z1.max} bpm</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '60%', height: '100%', background: '#38bdf8' }} />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Z2 - Queima de Gordura (60-70%)</span>
+                    <span>{hrZones.z2.min} - {hrZones.z2.max} bpm</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '70%', height: '100%', background: '#10b981' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Z3 - Ritmo / Endurance (70-80%)</span>
+                    <span>{hrZones.z3.min} - {hrZones.z3.max} bpm</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '80%', height: '100%', background: '#f59e0b' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Z4 - Limiar Anaeróbico (80-90%)</span>
+                    <span>{hrZones.z4.min} - {hrZones.z4.max} bpm</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '90%', height: '100%', background: '#f97316' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Z5 - Esforço Máximo (90-100%)</span>
+                    <span>{hrZones.z5.min}+ bpm</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ width: '100%', height: '100%', background: '#ef4444' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Projeção de Ritmos (Riegel) */}
+            <div className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontWeight: 600 }}>
+                <Award size={18} color="var(--accent-blue)" />
+                Projeção de Tempos de Prova (Riegel)
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
+                {referenceRun.isDefault 
+                  ? 'Baseado no ritmo padrão (5km em 25min).'
+                  : `Baseado na sua melhor corrida (${referenceRun.distance}km em ${referenceRun.time}min).`
+                }
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                {riegelProjections.map((proj, idx) => (
+                  <div key={idx} style={{ padding: '0.75rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', textAlign: 'left' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{proj.name}</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-blue)', marginTop: '0.15rem' }}>
+                      {formatProjectedTime(proj.time)}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      Pace: {(proj.time / proj.dist).toFixed(2)} min/km
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico de Performance de Corrida */}
+          {runLogs.length > 0 && (
+            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1.15rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                <TrendingUp size={18} color="var(--accent-blue)" />
+                Evolução de Performance Cardiovascular
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                Acompanhamento integrado de ritmo (min/km) e freq. cardíaca média (bpm) ao longo do tempo.
+              </p>
+              <div style={{ height: '250px', width: '100%' }}>
+                <Line data={runPerformanceChartData} options={runChartOptions} />
+              </div>
+            </div>
+          )}
 
           {/* Tabela de logs de Corrida */}
           <div className="glass-card" style={{ padding: '1.5rem' }}>

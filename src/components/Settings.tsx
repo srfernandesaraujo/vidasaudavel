@@ -67,6 +67,35 @@ export const Settings: React.FC = () => {
               />
             </div>
           </div>
+
+          <div className="grid-cols-2" style={{ marginTop: '1rem' }}>
+            <div className="form-group">
+              <label htmlFor="setAge">Idade (anos) - Para zonas cardíacas</label>
+              <input
+                id="setAge"
+                type="number"
+                min="1"
+                max="120"
+                className="form-control"
+                value={settings.age || 30}
+                onChange={(e) => setSettings({ ...settings, age: Number(e.target.value) })}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="setRHR">FC em Repouso (bpm) - Fórmula Karvonen</label>
+              <input
+                id="setRHR"
+                type="number"
+                min="30"
+                max="120"
+                className="form-control"
+                value={settings.restingHeartRate || 60}
+                onChange={(e) => setSettings({ ...settings, restingHeartRate: Number(e.target.value) })}
+                required
+              />
+            </div>
+          </div>
         </div>
 
         {/* Integração de IA */}

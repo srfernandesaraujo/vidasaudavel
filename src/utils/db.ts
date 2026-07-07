@@ -85,6 +85,8 @@ export interface RaceRegistration {
 export interface UserSettings {
   userName: string;
   height: number;
+  age: number;
+  restingHeartRate: number;
   apiKey: string;
   apiProvider: 'gemini' | 'openai' | 'none';
 }
@@ -125,6 +127,8 @@ const INITIAL_EXERCISES: Exercise[] = [
 const INITIAL_SETTINGS: UserSettings = {
   userName: 'Atleta Saudável',
   height: 175,
+  age: 30,
+  restingHeartRate: 60,
   apiKey: '',
   apiProvider: 'none',
 };
