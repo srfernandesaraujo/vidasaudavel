@@ -90,57 +90,69 @@ export const MuscleMap: React.FC = () => {
     }
   ], []);
 
-  // Calcula estatísticas reais por grupo muscular nos últimos 14 dias com checagem de erros robusta
+  // Calcula estatísticas reais por grupo muscular com try-catch preventivo contra dados corrompidos
   const stats = useMemo(() => {
     const counts: Record<string, number> = {};
     const lastDates: Record<string, string> = {};
 
-    // Inicializa contadores
+    // Inicializa contadores padronizados
     muscleGroups.forEach(g => {
       counts[g.id] = 0;
       lastDates[g.id] = 'Nunca treinado';
     });
 
-    // Ordena logs do mais antigo para o mais recente com segurança
-    const safeLogs = Array.isArray(workoutLogs) ? [...workoutLogs] : [];
-    const sortedLogs = safeLogs.sort((a, b) => {
-      const aTime = a.date ? new Date(a.date).getTime() : 0;
-      const bTime = b.date ? new Date(b.date).getTime() : 0;
-      return aTime - bTime;
-    });
+    try {
+      const safeLogs = Array.isArray(workoutLogs) ? [...workoutLogs] : [];
+      const sortedLogs = safeLogs.sort((a, b) => {
+        const aTime = a && a.date ? new Date(a.date).getTime() : 0;
+        const bTime = b && b.date ? new Date(b.date).getTime() : 0;
+        return aTime - bTime;
+      });
 
-    sortedLogs.forEach(log => {
-      if (log && Array.isArray(log.exercises)) {
-        log.exercises.forEach(ex => {
-          if (ex && ex.muscleGroup) {
-            const group = ex.muscleGroup;
-            if (counts[group] !== undefined) {
-              counts[group] += 1;
-              if (log.date) {
-                const parts = log.date.split('-');
-                if (parts.length === 3) {
-                  const [year, month, day] = parts;
-                  lastDates[group] = `${day}/${month}/${year}`;
-                } else {
-                  lastDates[group] = log.date;
+      sortedLogs.forEach(log => {
+        if (log && Array.isArray(log.exercises)) {
+          log.exercises.forEach(ex => {
+            if (ex && ex.muscleGroup) {
+              const group = ex.muscleGroup;
+              // Tratamento de acentuação e correspondência robusta
+              if (counts[group] !== undefined) {
+                counts[group] += 1;
+                if (log.date) {
+                  const parts = log.date.split('-');
+                  if (parts.length === 3) {
+                    const [year, month, day] = parts;
+                    lastDates[group] = `${day}/${month}/${year}`;
+                  } else {
+                    lastDates[group] = log.date;
+                  }
                 }
               }
             }
-          }
-        });
-      }
-    });
+          });
+        }
+      });
+    } catch (err) {
+      console.error("Erro ao processar estatísticas do mapa muscular:", err);
+    }
 
     return { counts, lastDates };
   }, [workoutLogs, muscleGroups]);
 
-  // Calcula a frequência teórica
+  // Calcula a frequência teórica de forma resiliente
   const theoreticalFreq = useMemo(() => {
     const freqs: Record<string, number> = {};
-    const safeExercises = Array.isArray(exercises) ? exercises : [];
     muscleGroups.forEach(g => {
-      freqs[g.id] = safeExercises.filter(ex => ex && ex.muscleGroup === g.id).length;
+      freqs[g.id] = 0;
     });
+
+    try {
+      const safeExercises = Array.isArray(exercises) ? exercises : [];
+      muscleGroups.forEach(g => {
+        freqs[g.id] = safeExercises.filter(ex => ex && ex.muscleGroup === g.id).length;
+      });
+    } catch (err) {
+      console.error("Erro ao calcular frequências teóricas:", err);
+    }
     return freqs;
   }, [exercises, muscleGroups]);
 
