@@ -1,0 +1,958 @@
+import React, { useState, useMemo } from 'react';
+import { db, type RunLog, type BodyCompLog } from '../utils/db';
+import { 
+  Footprints, 
+  TrendingUp, 
+  Plus, 
+  Trash2, 
+  Heart, 
+  Flame, 
+  Clock, 
+  Activity,
+  Award
+} from 'lucide-react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  type ChartOptions
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+import './Styles/runtracker.css';
+
+// Registra módulos do Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
+
+export const RunTracker: React.FC = () => {
+  const [activeSubTab, setActiveSubTab] = useState<'runs' | 'bodycomp'>('runs');
+  const [runLogs, setRunLogs] = useState<RunLog[]>(db.getRunLogs());
+  const [bodyCompLogs, setBodyCompLogs] = useState<BodyCompLog[]>(db.getBodyCompLogs());
+  
+  // Modais
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
+
+  // Forms
+  const [runForm, setRunForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    time: '',
+    distance: '',
+    calories: '',
+    heartRate: ''
+  });
+
+  const [bodyForm, setBodyForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    weight: '',
+    idealWeight: '',
+    bodyFat: '',
+    bodyFatGoal: '',
+    muscleMass: '',
+    muscleMassGoal: '',
+    bodyWater: '',
+    boneMass: '',
+    basalMetabolism: '',
+    proteins: '',
+    visceralFat: '',
+    visceralFatGoal: '',
+    metabolicAge: '',
+    heartRate: ''
+  });
+
+  const refreshData = () => {
+    setRunLogs(db.getRunLogs());
+    setBodyCompLogs(db.getBodyCompLogs());
+  };
+
+  // Pace dinâmico para visualização no form de corrida
+  const calculatedPace = useMemo(() => {
+    const time = Number(runForm.time);
+    const dist = Number(runForm.distance);
+    if (time > 0 && dist > 0) {
+      return (time / dist).toFixed(2);
+    }
+    return '0.00';
+  }, [runForm.time, runForm.distance]);
+
+  // -------------------------------------------------------------
+  // HANDLERS
+  // -------------------------------------------------------------
+  const handleSaveRun = (e: React.FormEvent) => {
+    e.preventDefault();
+    const time = Number(runForm.time);
+    const distance = Number(runForm.distance);
+    if (time <= 0 || distance <= 0) {
+      alert('Tempo e Distância devem ser maiores que zero.');
+      return;
+    }
+
+    const pace = Number((time / distance).toFixed(2));
+
+    db.addRunLog({
+      date: runForm.date,
+      time,
+      distance,
+      pace,
+      calories: Number(runForm.calories) || 0,
+      heartRate: Number(runForm.heartRate) || 0
+    });
+
+    setIsRunModalOpen(false);
+    setRunForm({
+      date: new Date().toISOString().split('T')[0],
+      time: '',
+      distance: '',
+      calories: '',
+      heartRate: ''
+    });
+    refreshData();
+  };
+
+  const handleDeleteRun = (id: string) => {
+    if (window.confirm('Excluir esta corrida do histórico?')) {
+      db.deleteRunLog(id);
+      refreshData();
+    }
+  };
+
+  const handleSaveBodyComp = (e: React.FormEvent) => {
+    e.preventDefault();
+    const weight = Number(bodyForm.weight);
+    const bodyFat = Number(bodyForm.bodyFat);
+    const muscleMass = Number(bodyForm.muscleMass);
+    
+    if (weight <= 0) {
+      alert('Peso é obrigatório.');
+      return;
+    }
+
+    db.addBodyCompLog({
+      date: bodyForm.date,
+      weight,
+      idealWeight: Number(bodyForm.idealWeight) || weight,
+      bodyFat: bodyFat || 0,
+      bodyFatGoal: Number(bodyForm.bodyFatGoal) || 15,
+      muscleMass: muscleMass || 0,
+      muscleMassGoal: Number(bodyForm.muscleMassGoal) || 35,
+      bodyWater: Number(bodyForm.bodyWater) || 55,
+      boneMass: Number(bodyForm.boneMass) || 3,
+      basalMetabolism: Number(bodyForm.basalMetabolism) || 1600,
+      proteins: Number(bodyForm.proteins) || 16,
+      visceralFat: Number(bodyForm.visceralFat) || 5,
+      visceralFatGoal: Number(bodyForm.visceralFatGoal) || 5,
+      metabolicAge: Number(bodyForm.metabolicAge) || 30,
+      heartRate: Number(bodyForm.heartRate) || 60
+    });
+
+    setIsBodyModalOpen(false);
+    // Reinicia form
+    setBodyForm({
+      date: new Date().toISOString().split('T')[0],
+      weight: '',
+      idealWeight: '',
+      bodyFat: '',
+      bodyFatGoal: '',
+      muscleMass: '',
+      muscleMassGoal: '',
+      bodyWater: '',
+      boneMass: '',
+      basalMetabolism: '',
+      proteins: '',
+      visceralFat: '',
+      visceralFatGoal: '',
+      metabolicAge: '',
+      heartRate: ''
+    });
+    refreshData();
+  };
+
+  const handleDeleteBody = (id: string) => {
+    if (window.confirm('Excluir esta medição corporal?')) {
+      db.deleteBodyCompLog(id);
+      refreshData();
+    }
+  };
+
+  // -------------------------------------------------------------
+  // CONFIGURAÇÃO DOS GRÁFICOS (CHART.JS)
+  // -------------------------------------------------------------
+  const chartOptions = (_titleStr: string, yLabel: string): ChartOptions<'line'> => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          color: '#9ea4b5',
+          font: { family: 'Inter', size: 11 }
+        }
+      },
+      tooltip: {
+        backgroundColor: '#12141c',
+        titleColor: '#ffffff',
+        bodyColor: '#e2e8f0',
+        borderColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+        ticks: { color: '#5e6475', font: { family: 'Inter', size: 10 } }
+      },
+      y: {
+        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+        ticks: { color: '#5e6475', font: { family: 'Inter', size: 10 } },
+        title: {
+          display: true,
+          text: yLabel,
+          color: '#5e6475',
+          font: { family: 'Inter', size: 10 }
+        }
+      }
+    }
+  });
+
+  // Gráficos Data Mappers
+  const dates = bodyCompLogs.map(log => log.date.split('-').reverse().slice(0, 2).join('/')); // ex: DD/MM
+
+  const weightChartData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Peso Atual (kg)',
+        data: bodyCompLogs.map(log => log.weight),
+        borderColor: '#8a2be2',
+        backgroundColor: 'rgba(138, 43, 226, 0.1)',
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: '#8a2be2',
+        pointRadius: 4
+      },
+      {
+        label: 'Peso Ideal (Meta)',
+        data: bodyCompLogs.map(log => log.idealWeight),
+        borderColor: '#ffd700',
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0
+      }
+    ]
+  };
+
+  const fatChartData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Gordura Corporal (%)',
+        data: bodyCompLogs.map(log => log.bodyFat),
+        borderColor: '#00e5ff',
+        backgroundColor: 'rgba(0, 229, 255, 0.1)',
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: '#00e5ff',
+        pointRadius: 4
+      },
+      {
+        label: 'Meta de Gordura',
+        data: bodyCompLogs.map(log => log.bodyFatGoal),
+        borderColor: '#ff6b4a',
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0
+      }
+    ]
+  };
+
+  const muscleChartData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Massa Muscular (kg)',
+        data: bodyCompLogs.map(log => log.muscleMass),
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: '#10b981',
+        pointRadius: 4
+      },
+      {
+        label: 'Meta de Massa Muscular',
+        data: bodyCompLogs.map(log => log.muscleMassGoal),
+        borderColor: '#c084fc',
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0
+      }
+    ]
+  };
+
+  const visceralChartData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Gordura Visceral',
+        data: bodyCompLogs.map(log => log.visceralFat),
+        borderColor: '#ff6b4a',
+        backgroundColor: 'rgba(255, 107, 74, 0.1)',
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: '#ff6b4a',
+        pointRadius: 4
+      },
+      {
+        label: 'Meta de Visceral',
+        data: bodyCompLogs.map(log => log.visceralFatGoal),
+        borderColor: '#10b981',
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0
+      }
+    ]
+  };
+
+  // Últimas métricas de bioimpedância para resumos rápidos
+  const latestComp = useMemo(() => {
+    if (bodyCompLogs.length === 0) return null;
+    return bodyCompLogs[bodyCompLogs.length - 1];
+  }, [bodyCompLogs]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <header className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ textAlign: 'left' }}>
+          <h1 style={{ fontSize: '2.25rem', background: 'linear-gradient(135deg, #ffffff, #8b92b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Corrida & Composição Corporal
+          </h1>
+          <p style={{ color: 'var(--text-secondary)' }}>Registre suas sessões de corrida de rua e acompanhe a evolução de métricas de bioimpedância.</p>
+        </div>
+
+        <div>
+          {activeSubTab === 'runs' ? (
+            <button className="btn btn-accent" onClick={() => setIsRunModalOpen(true)}>
+              <Plus size={16} />
+              Registrar Corrida
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={() => setIsBodyModalOpen(true)}>
+              <Plus size={16} />
+              Registrar Biometria
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Abas */}
+      <div className="runtracker-tabs">
+        <button 
+          className={`runtracker-tab-btn ${activeSubTab === 'runs' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('runs')}
+        >
+          Treinos de Corrida
+        </button>
+        <button 
+          className={`runtracker-tab-btn ${activeSubTab === 'bodycomp' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('bodycomp')}
+        >
+          Composição Corporal & Biometria
+        </button>
+      </div>
+
+      {activeSubTab === 'runs' ? (
+        <section>
+          {/* Métricas rápidas de Corrida */}
+          <div className="runcomp-summary-metrics">
+            <div className="metric-mini-card">
+              <div className="metric-mini-title">Total Corridas</div>
+              <div className="metric-mini-value" style={{ color: 'var(--accent-blue)' }}>{runLogs.length}</div>
+              <div className="metric-mini-subtitle">Treinos Registrados</div>
+            </div>
+            <div className="metric-mini-card">
+              <div className="metric-mini-title">Distância Total</div>
+              <div className="metric-mini-value" style={{ color: 'var(--accent-blue)' }}>
+                {runLogs.reduce((acc, r) => acc + r.distance, 0).toFixed(1)} km
+              </div>
+              <div className="metric-mini-subtitle">Volume Acumulado</div>
+            </div>
+            <div className="metric-mini-card">
+              <div className="metric-mini-title">Pace Médio Global</div>
+              <div className="metric-mini-value">
+                {runLogs.length > 0 
+                  ? (runLogs.reduce((acc, r) => acc + r.pace, 0) / runLogs.length).toFixed(2)
+                  : '0.00'
+                } min/km
+              </div>
+              <div className="metric-mini-subtitle">Ritmo das Corridas</div>
+            </div>
+            <div className="metric-mini-card">
+              <div className="metric-mini-title">Calorias Queimadas</div>
+              <div className="metric-mini-value" style={{ color: 'var(--accent-orange)' }}>
+                {runLogs.reduce((acc, r) => acc + r.calories, 0)} kcal
+              </div>
+              <div className="metric-mini-subtitle">Energia Consumida</div>
+            </div>
+          </div>
+
+          {/* Tabela de logs de Corrida */}
+          <div className="glass-card" style={{ padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Activity size={18} color="var(--accent-blue)" />
+              Histórico de Sessões de Corrida
+            </h3>
+            {runLogs.length === 0 ? (
+              <div style={{ padding: '3rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Nenhuma corrida registrada no histórico. Clique em "Registrar Corrida" acima para começar!
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Distância (km)</th>
+                      <th>Tempo (min)</th>
+                      <th>Pace Médio (min/km)</th>
+                      <th>Calorias</th>
+                      <th>FC Média (bpm)</th>
+                      <th style={{ width: '60px' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runLogs.map((run) => (
+                      <tr key={run.id}>
+                        <td style={{ fontWeight: 600 }}>{run.date.split('-').reverse().join('/')}</td>
+                        <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{run.distance} km</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Clock size={12} color="var(--text-muted)" />
+                            {run.time} min
+                          </div>
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{run.pace.toFixed(2)} min/km</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Flame size={12} color="var(--accent-orange)" />
+                            {run.calories} kcal
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Heart size={12} color="#ff6b6b" />
+                            {run.heartRate > 0 ? `${run.heartRate} bpm` : '-'}
+                          </div>
+                        </td>
+                        <td>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '0.3rem 0.5rem', color: '#ff6b6b' }}
+                            onClick={() => handleDeleteRun(run.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section>
+          {/* Cards Rápidos de Bioimpedância */}
+          {latestComp ? (
+            <div className="runcomp-summary-metrics" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">Peso</div>
+                <div className="metric-mini-value" style={{ color: 'var(--accent-purple)' }}>{latestComp.weight} kg</div>
+                <div className="metric-mini-subtitle">Meta: {latestComp.idealWeight} kg</div>
+              </div>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">IMC</div>
+                <div className="metric-mini-value">{latestComp.bmi}</div>
+                <div className="metric-mini-subtitle">Índice Corporal</div>
+              </div>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">Gordura Corporal</div>
+                <div className="metric-mini-value" style={{ color: 'var(--accent-blue)' }}>{latestComp.bodyFat}%</div>
+                <div className="metric-mini-subtitle">Meta: {latestComp.bodyFatGoal}%</div>
+              </div>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">Massa Muscular</div>
+                <div className="metric-mini-value" style={{ color: 'var(--accent-emerald)' }}>{latestComp.muscleMass} kg</div>
+                <div className="metric-mini-subtitle">Meta: {latestComp.muscleMassGoal} kg</div>
+              </div>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">Gordura Visceral</div>
+                <div className="metric-mini-value" style={{ color: 'var(--accent-orange)' }}>{latestComp.visceralFat}</div>
+                <div className="metric-mini-subtitle">Meta: {latestComp.visceralFatGoal}</div>
+              </div>
+              <div className="metric-mini-card">
+                <div className="metric-mini-title">Idade Metabólica</div>
+                <div className="metric-mini-value">{latestComp.metabolicAge} anos</div>
+                <div className="metric-mini-subtitle">Metabolismo</div>
+              </div>
+            </div>
+          ) : (
+            <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', marginBottom: '2rem' }}>
+              Nenhuma medição corporal registrada. Registre seus dados de bioimpedância para gerar os gráficos de evolução.
+            </div>
+          )}
+
+          {/* Seção de Gráficos de Progressão */}
+          {bodyCompLogs.length > 0 && (
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={20} color="var(--accent-blue)" />
+                Gráficos de Evolução Corporal
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Acompanhamento de peso, gordura, massa muscular e gordura visceral ao longo do tempo.</p>
+              
+              <div className="charts-grid">
+                <div className="chart-container-card glass-card">
+                  <div className="chart-title">Evolução do Peso vs. Peso Ideal</div>
+                  <div style={{ height: '220px' }}>
+                    <Line data={weightChartData} options={chartOptions('Evolução do Peso', 'Peso (kg)')} />
+                  </div>
+                </div>
+
+                <div className="chart-container-card glass-card">
+                  <div className="chart-title">Evolução do % de Gordura vs. Meta</div>
+                  <div style={{ height: '220px' }}>
+                    <Line data={fatChartData} options={chartOptions('Percentual de Gordura', 'Gordura (%)')} />
+                  </div>
+                </div>
+
+                <div className="chart-container-card glass-card">
+                  <div className="chart-title">Evolução de Massa Muscular vs. Meta</div>
+                  <div style={{ height: '220px' }}>
+                    <Line data={muscleChartData} options={chartOptions('Massa Muscular', 'Massa (kg)')} />
+                  </div>
+                </div>
+
+                <div className="chart-container-card glass-card">
+                  <div className="chart-title">Evolução de Gordura Visceral vs. Meta</div>
+                  <div style={{ height: '220px' }}>
+                    <Line data={visceralChartData} options={chartOptions('Gordura Visceral', 'Nível')} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tabela de logs Biométricos */}
+          <div className="glass-card" style={{ padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Award size={18} color="var(--accent-purple)" />
+              Histórico de Medições de Bioimpedância
+            </h3>
+            {bodyCompLogs.length === 0 ? (
+              <div style={{ padding: '2rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Sem medições de bioimpedância no histórico.
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="custom-table" style={{ fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Peso</th>
+                      <th>IMC</th>
+                      <th>% Gordura</th>
+                      <th>Massa Muscular</th>
+                      <th>% Água</th>
+                      <th>Massa Magra</th>
+                      <th>Massa Óssea</th>
+                      <th>TMB (Metab.)</th>
+                      <th>% Proteínas</th>
+                      <th>Visceral</th>
+                      <th>Idade Metab.</th>
+                      <th>FC Repouso</th>
+                      <th style={{ width: '50px' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bodyCompLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td style={{ fontWeight: 600 }}>{log.date.split('-').reverse().join('/')}</td>
+                        <td style={{ color: 'var(--accent-purple)', fontWeight: 700 }}>{log.weight} kg</td>
+                        <td style={{ fontWeight: 600 }}>{log.bmi}</td>
+                        <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{log.bodyFat}%</td>
+                        <td style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>{log.muscleMass} kg</td>
+                        <td>{log.bodyWater}%</td>
+                        <td>{log.leanMass} kg</td>
+                        <td>{log.boneMass} kg</td>
+                        <td>{log.basalMetabolism} kcal</td>
+                        <td>{log.proteins}%</td>
+                        <td style={{ fontWeight: 600 }}>{log.visceralFat}</td>
+                        <td>{log.metabolicAge} anos</td>
+                        <td>{log.heartRate} bpm</td>
+                        <td>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '0.25rem 0.4rem', color: '#ff6b6b' }}
+                            onClick={() => handleDeleteBody(log.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* -------------------------------------------------------------
+          MODAIS
+         ------------------------------------------------------------- */}
+
+      {/* Modal Registrar Corrida */}
+      {isRunModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Footprints size={20} color="var(--accent-blue)" />
+                Registrar Corrida de Rua
+              </h3>
+              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsRunModalOpen(false)}>X</button>
+            </div>
+            <form onSubmit={handleSaveRun}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="runDate">Data da Corrida</label>
+                  <input
+                    id="runDate"
+                    type="date"
+                    className="form-control"
+                    value={runForm.date}
+                    onChange={(e) => setRunForm({ ...runForm, date: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid-cols-2">
+                  <div className="form-group">
+                    <label htmlFor="runDist">Distância (km)</label>
+                    <input
+                      id="runDist"
+                      type="number"
+                      step="0.01"
+                      min="0.1"
+                      className="form-control"
+                      placeholder="Ex: 5.2"
+                      value={runForm.distance}
+                      onChange={(e) => setRunForm({ ...runForm, distance: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="runTime">Tempo (minutos)</label>
+                    <input
+                      id="runTime"
+                      type="number"
+                      step="0.1"
+                      min="0.5"
+                      className="form-control"
+                      placeholder="Ex: 30"
+                      value={runForm.time}
+                      onChange={(e) => setRunForm({ ...runForm, time: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid-cols-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="runCals">Calorias (Kcal)</label>
+                    <input
+                      id="runCals"
+                      type="number"
+                      min="0"
+                      className="form-control"
+                      placeholder="Ex: 350"
+                      value={runForm.calories}
+                      onChange={(e) => setRunForm({ ...runForm, calories: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="runFc">FC Média (bpm)</label>
+                    <input
+                      id="runFc"
+                      type="number"
+                      min="30"
+                      max="220"
+                      className="form-control"
+                      placeholder="Ex: 150"
+                      value={runForm.heartRate}
+                      onChange={(e) => setRunForm({ ...runForm, heartRate: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Pace Estimado</label>
+                    <div className="form-control" style={{ background: 'rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                      {calculatedPace} min/km
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsRunModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-accent">Salvar Corrida</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Registrar Biometria / Composição Corporal */}
+      {isBodyModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '650px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={20} color="var(--accent-purple)" />
+                Lançar Dados de Bioimpedância
+              </h3>
+              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsBodyModalOpen(false)}>X</button>
+            </div>
+            <form onSubmit={handleSaveBodyComp}>
+              <div className="modal-body" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                <div className="form-group">
+                  <label htmlFor="bodyDate">Data da Medição</label>
+                  <input
+                    id="bodyDate"
+                    type="date"
+                    className="form-control"
+                    value={bodyForm.date}
+                    onChange={(e) => setBodyForm({ ...bodyForm, date: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem', marginTop: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>
+                  Peso e Composição de Gordura / Músculo
+                </h4>
+
+                <div className="bodycomp-grid-inputs">
+                  <div className="form-group">
+                    <label htmlFor="weight">Peso (kg)</label>
+                    <input
+                      id="weight"
+                      type="number"
+                      step="0.05"
+                      min="20"
+                      max="300"
+                      className="form-control"
+                      value={bodyForm.weight}
+                      onChange={(e) => setBodyForm({ ...bodyForm, weight: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="idealWeight">Peso Ideal (kg)</label>
+                    <input
+                      id="idealWeight"
+                      type="number"
+                      step="0.05"
+                      min="20"
+                      className="form-control"
+                      value={bodyForm.idealWeight}
+                      onChange={(e) => setBodyForm({ ...bodyForm, idealWeight: e.target.value })}
+                      placeholder="Ex: 75"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="bodyFat">Gordura (%)</label>
+                    <input
+                      id="bodyFat"
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="70"
+                      className="form-control"
+                      value={bodyForm.bodyFat}
+                      onChange={(e) => setBodyForm({ ...bodyForm, bodyFat: e.target.value })}
+                      placeholder="Ex: 18.5"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="bodyFatGoal">Meta Gordura (%)</label>
+                    <input
+                      id="bodyFatGoal"
+                      type="number"
+                      step="0.1"
+                      className="form-control"
+                      value={bodyForm.bodyFatGoal}
+                      onChange={(e) => setBodyForm({ ...bodyForm, bodyFatGoal: e.target.value })}
+                      placeholder="Ex: 12"
+                    />
+                  </div>
+                </div>
+
+                <div className="bodycomp-grid-inputs" style={{ marginTop: '0.5rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="muscleMass">Massa Musc. (kg)</label>
+                    <input
+                      id="muscleMass"
+                      type="number"
+                      step="0.1"
+                      min="5"
+                      className="form-control"
+                      value={bodyForm.muscleMass}
+                      onChange={(e) => setBodyForm({ ...bodyForm, muscleMass: e.target.value })}
+                      placeholder="Ex: 34"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="muscleMassGoal">Meta Massa (kg)</label>
+                    <input
+                      id="muscleMassGoal"
+                      type="number"
+                      step="0.1"
+                      className="form-control"
+                      value={bodyForm.muscleMassGoal}
+                      onChange={(e) => setBodyForm({ ...bodyForm, muscleMassGoal: e.target.value })}
+                      placeholder="Ex: 38"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="visceralFat">Gordura Visceral</label>
+                    <input
+                      id="visceralFat"
+                      type="number"
+                      min="1"
+                      max="30"
+                      className="form-control"
+                      value={bodyForm.visceralFat}
+                      onChange={(e) => setBodyForm({ ...bodyForm, visceralFat: e.target.value })}
+                      placeholder="Ex: 8"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="visceralFatGoal">Meta Visceral</label>
+                    <input
+                      id="visceralFatGoal"
+                      type="number"
+                      className="form-control"
+                      value={bodyForm.visceralFatGoal}
+                      onChange={(e) => setBodyForm({ ...bodyForm, visceralFatGoal: e.target.value })}
+                      placeholder="Ex: 5"
+                    />
+                  </div>
+                </div>
+
+                <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem', marginTop: '1.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>
+                  Água, Estrutura e Metabolismo
+                </h4>
+
+                <div className="bodycomp-grid-inputs">
+                  <div className="form-group">
+                    <label htmlFor="bodyWater">Água (%)</label>
+                    <input
+                      id="bodyWater"
+                      type="number"
+                      step="0.1"
+                      className="form-control"
+                      value={bodyForm.bodyWater}
+                      onChange={(e) => setBodyForm({ ...bodyForm, bodyWater: e.target.value })}
+                      placeholder="Ex: 55.4"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="boneMass">Massa Óssea (kg)</label>
+                    <input
+                      id="boneMass"
+                      type="number"
+                      step="0.1"
+                      className="form-control"
+                      value={bodyForm.boneMass}
+                      onChange={(e) => setBodyForm({ ...bodyForm, boneMass: e.target.value })}
+                      placeholder="Ex: 3.2"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="basal">TMB Metabólica (kcal)</label>
+                    <input
+                      id="basal"
+                      type="number"
+                      className="form-control"
+                      value={bodyForm.basalMetabolism}
+                      onChange={(e) => setBodyForm({ ...bodyForm, basalMetabolism: e.target.value })}
+                      placeholder="Ex: 1750"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="proteins">Proteínas (%)</label>
+                    <input
+                      id="proteins"
+                      type="number"
+                      step="0.1"
+                      className="form-control"
+                      value={bodyForm.proteins}
+                      onChange={(e) => setBodyForm({ ...bodyForm, proteins: e.target.value })}
+                      placeholder="Ex: 16.8"
+                    />
+                  </div>
+                </div>
+
+                <div className="bodycomp-grid-inputs" style={{ marginTop: '0.5rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="metAge">Idade Metabólica</label>
+                    <input
+                      id="metAge"
+                      type="number"
+                      className="form-control"
+                      value={bodyForm.metabolicAge}
+                      onChange={(e) => setBodyForm({ ...bodyForm, metabolicAge: e.target.value })}
+                      placeholder="Ex: 28"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="pulse">FC Repouso (bpm)</label>
+                    <input
+                      id="pulse"
+                      type="number"
+                      className="form-control"
+                      value={bodyForm.heartRate}
+                      onChange={(e) => setBodyForm({ ...bodyForm, heartRate: e.target.value })}
+                      placeholder="Ex: 60"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsBodyModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Salvar Biometria</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
