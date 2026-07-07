@@ -21,6 +21,58 @@ import './Styles/workouts.css';
 
 ChartJS.register(...registerables);
 
+class SafeRadar extends React.Component<any, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("SafeRadar caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
+          Não foi possível exibir o gráfico de volume nesta sessão.
+        </div>
+      );
+    }
+    return <Radar data={this.props.data || { labels: [], datasets: [] }} options={this.props.options} {...this.props} />;
+  }
+}
+
+class SafeMuscleMap extends React.Component<any, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("SafeMuscleMap caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: '#ff6b6b', textAlign: 'center', background: 'rgba(255,0,0,0.05)', borderRadius: '8px' }}>
+          Ocorreu um erro ao renderizar as imagens do mapa muscular. Tente reiniciar seu navegador.
+        </div>
+      );
+    }
+    return <MuscleMap {...this.props} />;
+  }
+}
+
 export const Workouts: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'workouts' | 'musclemap'>('workouts');
   const [workouts, setWorkouts] = useState<Workout[]>(db.getWorkouts());
@@ -49,21 +101,27 @@ export const Workouts: React.FC = () => {
     const volume: Record<string, number> = {};
     muscles.forEach(m => { volume[m] = 0; });
 
-    const now = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 7);
+    try {
+      const now = new Date();
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 7);
 
-    const safeLogs = Array.isArray(logs) ? logs : [];
-    safeLogs.forEach(log => {
-      const logDateObj = log.date ? new Date(log.date) : null;
-      if (logDateObj && logDateObj >= sevenDaysAgo && Array.isArray(log.exercises)) {
-        log.exercises.forEach(ex => {
-          if (ex && ex.muscleGroup && volume[ex.muscleGroup] !== undefined) {
-            volume[ex.muscleGroup] += Number(ex.series) || 0;
+      const safeLogs = Array.isArray(logs) ? logs : [];
+      safeLogs.forEach(log => {
+        if (log && log.date && Array.isArray(log.exercises)) {
+          const logDateObj = new Date(log.date);
+          if (logDateObj && !isNaN(logDateObj.getTime()) && logDateObj >= sevenDaysAgo) {
+            log.exercises.forEach(ex => {
+              if (ex && ex.muscleGroup && volume[ex.muscleGroup] !== undefined) {
+                volume[ex.muscleGroup] += Number(ex.series) || 0;
+              }
+            });
           }
-        });
-      }
-    });
+        }
+      });
+    } catch (err) {
+      console.error("Erro no cálculo do volume muscular para o Radar:", err);
+    }
 
     return {
       labels: muscles,
@@ -478,7 +536,7 @@ export const Workouts: React.FC = () => {
               Distribuição semanal de séries completadas nos últimos 7 dias comparada com a meta científica mínima (10 séries).
             </p>
             <div style={{ height: '320px', position: 'relative' }}>
-              <Radar data={muscleVolumeData} options={radarOptions} />
+              <SafeRadar data={muscleVolumeData} options={radarOptions} />
             </div>
           </section>
 
@@ -490,7 +548,7 @@ export const Workouts: React.FC = () => {
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
               Os cards abaixo mostram o volume teórico nos treinos cadastrados (azul/roxo) e quantas vezes foram ativados no histórico de execuções (verde).
             </p>
-            <MuscleMap />
+            <SafeMuscleMap />
           </section>
         </div>
       ) : (
