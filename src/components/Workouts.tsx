@@ -25,6 +25,7 @@ import {
   type ChartOptions
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
+import confetti from 'canvas-confetti';
 import './Styles/workouts.css';
 
 ChartJS.register(
@@ -315,10 +316,12 @@ export const Workouts: React.FC = () => {
       exercises: loggedExercises
     });
 
-    // Atualiza os PRs locais se a carga anotada for maior que o PR anterior
+    // Atualiza os PRs locais se a carga anotada for maior que o PR anterior e monitora se houve recorde
+    let isNewPR = false;
     workoutExs.forEach(ex => {
       const weightLogged = logWeights[ex.id] || 0;
       if (weightLogged > ex.prWeight) {
+        isNewPR = true;
         db.saveExercise({
           ...ex,
           prWeight: weightLogged
@@ -329,7 +332,37 @@ export const Workouts: React.FC = () => {
     setIsLogModalOpen(false);
     setSelectedWorkoutForLog(null);
     refreshData();
-    alert('Treino registrado com sucesso!');
+
+    // Efeito festivo de confetes
+    confetti({
+      particleCount: 80,
+      spread: 65,
+      origin: { y: 0.65 },
+      colors: ['#10b981', '#3b82f6', '#8b5cf6']
+    });
+
+    if (isNewPR) {
+      // Confete dourado duplo para celebrar o PR
+      setTimeout(() => {
+        confetti({
+          particleCount: 100,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.6 },
+          colors: ['#fbbf24', '#f59e0b', '#fffbeb']
+        });
+        confetti({
+          particleCount: 100,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.6 },
+          colors: ['#fbbf24', '#f59e0b', '#fffbeb']
+        });
+      }, 300);
+      alert('Treino registrado! 🏆 NOVO RECORDE PESSOAL (PR) DETECTADO! Continue evoluindo!');
+    } else {
+      alert('Treino registrado com sucesso!');
+    }
   };
 
   const handleTemplateSelection = (templateType: 'hypertrophy' | 'power') => {

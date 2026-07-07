@@ -219,9 +219,31 @@
 }
 
 .exercise-pr-tag {
-  color: var(--accent-gold);
+  color: #ffb700;
   font-weight: 700;
   font-size: 0.85rem;
+  background: rgba(255, 183, 0, 0.08);
+  border: 1px solid rgba(255, 183, 0, 0.2);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  display: inline-block;
+  box-shadow: 0 0 10px rgba(255, 183, 0, 0.15);
+  animation: pr-glow-pulse 2s infinite ease-in-out;
+}
+
+@keyframes pr-glow-pulse {
+  0% {
+    box-shadow: 0 0 6px rgba(255, 183, 0, 0.15);
+    border-color: rgba(255, 183, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 183, 0, 0.45);
+    border-color: rgba(255, 183, 0, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 6px rgba(255, 183, 0, 0.15);
+    border-color: rgba(255, 183, 0, 0.2);
+  }
 }
 
 .exercise-notes {

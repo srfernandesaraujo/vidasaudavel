@@ -24,6 +24,7 @@ import {
   type ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import confetti from 'canvas-confetti';
 import './Styles/runtracker.css';
 
 // Registra módulos do Chart.js
@@ -175,6 +176,15 @@ export const RunTracker: React.FC = () => {
       heartRate: ''
     });
     refreshData();
+
+    // Confetes ciano e azul para comemorar o cardio concluído
+    confetti({
+      particleCount: 85,
+      spread: 65,
+      origin: { y: 0.65 },
+      colors: ['#00e5ff', '#2563eb', '#3b82f6']
+    });
+    alert('Sessão de corrida registrada com sucesso! Continue mantendo o ritmo!');
   };
 
   const handleDeleteRun = (id: string) => {
