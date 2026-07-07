@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { db } from '../utils/db';
+import { askAICoach, type ChatMessage } from '../utils/aiEngine';
 import { 
   Dumbbell, 
   Footprints, 
@@ -10,7 +11,8 @@ import {
   Droplet,
   Apple,
   Sparkles,
-  Scale
+  Scale,
+  Send
 } from 'lucide-react';
 import './Styles/dashboard.css';
 
@@ -39,6 +41,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
   const getEstimated1RM = (weight: number, repetitionsStr: string) => {
     const reps = parseInt(repetitionsStr) || 10;
     return Math.round(weight * (1 + reps / 30));
+  };
+
+  // Treinador IA
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      role: 'assistant',
+      content: `Olá, **${settings.userName}**! Sou o seu Treinador Particular de IA. Analisei seu histórico recente. Como posso ajudar com sua musculação ou corrida hoje?`
+    }
+  ]);
+  const [isTyping, setIsTyping] = useState(false);
+
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput.trim();
+    setChatInput('');
+    
+    // Adiciona mensagem do usuário
+    const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
+    setChatMessages(updatedMessages);
+    setIsTyping(true);
+
+    try {
+      // Chama o coach de IA
+      const response = await askAICoach(userMsg, chatMessages);
+      setChatMessages([...updatedMessages, { role: 'assistant' as const, content: response }]);
+    } catch (err) {
+      console.error(err);
+      setChatMessages([...updatedMessages, { role: 'assistant' as const, content: 'Desculpe, encontrei um erro ao processar sua resposta. Tente novamente em breve.' }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   // 1. Cálculo de XP Real
@@ -418,6 +454,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* 4.5 Treinador IA - Relatório e Chat Interativo (Novo) */}
+      <section className="ai-coach-section glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+          <div className="icon-wrapper purple-bg" style={{ width: 32, height: 32 }}>
+            <Bot size={16} color="var(--accent-purple)" />
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', margin: 0 }}>🤖 Treinador IA - Seu Personal Coach</h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Orientação personalizada com base no seu histórico real</span>
+          </div>
+        </div>
+
+        <div className="ai-coach-chat-area" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+          {chatMessages.map((msg, idx) => (
+            <div key={idx} style={{ 
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              background: msg.role === 'user' ? 'rgba(37, 99, 235, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+              border: msg.role === 'user' ? '1px solid rgba(37, 99, 235, 0.25)' : '1px solid var(--border-subtle)',
+              padding: '0.65rem 0.85rem',
+              borderRadius: '8px',
+              maxWidth: '85%',
+              fontSize: '0.8rem',
+              lineHeight: '1.4',
+              color: '#e2e8f0',
+              textAlign: 'left'
+            }}>
+              {msg.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} style={{ color: '#fff' }}>{part}</strong> : part)}
+            </div>
+          ))}
+          {isTyping && (
+            <div style={{ 
+              alignSelf: 'flex-start',
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--border-subtle)',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '8px',
+              fontSize: '0.8rem',
+              color: 'var(--text-muted)'
+            }}>
+              Digitando...
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSendChat} style={{ display: 'flex', gap: '0.5rem' }}>
+          <input 
+            type="text" 
+            className="form-control" 
+            style={{ flex: 1, height: '38px', fontSize: '0.8rem', padding: '0 0.85rem' }}
+            placeholder="Pergunte ao seu treinador... (ex: 'como melhorar meu pace?')"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            disabled={isTyping}
+          />
+          <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 0.85rem', height: '38px' }} disabled={isTyping}>
+            <Send size={14} />
+          </button>
+        </form>
       </section>
 
       {/* 5. Ações Rápidas (Abaixo, Estilizado) */}
