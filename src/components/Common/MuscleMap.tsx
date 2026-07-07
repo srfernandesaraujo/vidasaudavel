@@ -6,7 +6,8 @@ interface MuscleGroup {
   id: string;
   name: string;
   type: 'Superior' | 'Inferior';
-  svg: (fill: string, opacity: number, active: boolean) => React.ReactNode;
+  svg?: (fill: string, opacity: number, active: boolean) => React.ReactNode;
+  image?: string;
 }
 
 export const MuscleMap: React.FC = () => {
@@ -14,121 +15,37 @@ export const MuscleMap: React.FC = () => {
   const workoutLogs = db.getWorkoutLogs();
   const exercises = db.getExercises();
 
-  // 12 Grupos Musculares e seus desenhos SVG correspondentes
+  // 12 Grupos Musculares e seus desenhos correspondentes (SVG ou PNG)
   const muscleGroups: MuscleGroup[] = useMemo(() => [
     {
       id: 'Peitoral',
       name: 'Peitoral',
       type: 'Superior',
-      svg: (fill, opacity, active) => (
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Silhueta Base Frontal Superior */}
-          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
-          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          {/* Peito Base */}
-          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
-          
-          {/* Highlights do Peitoral */}
-          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <path d="M50,22 C59,22 64,25 64,36 C64,46 59,52 50,52 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <line x1="50" y1="22" x2="50" y2="52" stroke="#12141c" strokeWidth="1.5" />
-        </svg>
-      )
+      image: '/images/muscles/peitoral.png'
     },
     {
       id: 'Dorsal',
       name: 'Dorsal',
       type: 'Superior',
-      svg: (fill, opacity, active) => (
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Silhueta Base Traseira Superior */}
-          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
-          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          
-          {/* Corpo / Costas Base */}
-          <path d="M50,15 L36,30 C34,42 37,60 41,75 L59,75 C63,60 66,42 64,30 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
-          
-          {/* Highlights da Dorsal (Asas) */}
-          <path d="M36,30 C34,42 37,60 41,75 L50,75 L50,45 C41,45 36,36 36,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <path d="M64,30 C66,42 63,60 59,75 L50,75 L50,45 C59,45 64,36 64,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <line x1="50" y1="20" x2="50" y2="75" stroke="#12141c" strokeWidth="1.5" />
-        </svg>
-      )
+      image: '/images/muscles/dorsal.png'
     },
     {
       id: 'Trapézio',
       name: 'Trapézio',
       type: 'Superior',
-      svg: (fill, opacity, active) => (
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Silhueta Base Traseira Superior */}
-          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          
-          {/* Costas / Tronco Base */}
-          <path d="M50,15 L36,30 C34,42 37,60 41,75 L59,75 C63,60 66,42 64,30 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
-          
-          {/* Pescoço e Trapézio superior */}
-          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
-          <path d="M42,20 L58,20 L64,30 L50,45 L36,30 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <line x1="50" y1="12" x2="50" y2="45" stroke="#12141c" strokeWidth="1" />
-        </svg>
-      )
+      image: '/images/muscles/trapezio.png'
     },
     {
       id: 'Deltóide',
       name: 'Deltóide',
       type: 'Superior',
-      svg: (fill, opacity, active) => (
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Silhueta Base Frontal Superior */}
-          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
-          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M25,33 L16,60 L21,62 L28,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M75,33 L84,60 L79,62 L72,47 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
-          
-          {/* Highlights do Deltóide (Ombro Esquerdo e Direito) */}
-          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-        </svg>
-      )
+      image: '/images/muscles/deltoide.png'
     },
     {
       id: 'Bíceps',
       name: 'Bíceps',
       type: 'Superior',
-      svg: (fill, opacity, active) => (
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          {/* Silhueta Base Frontal Superior */}
-          <path d="M44,12 C44,6 56,6 56,12 L58,20 L42,20 Z" fill="#242835" stroke="#4e5366" strokeWidth="1" />
-          <path d="M37,52 L63,52 L60,84 L40,84 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M16,60 C14,72 12,82 10,88 L16,90 C18,84 21,72 21,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M84,60 C86,72 88,82 90,88 L84,90 C82,84 79,72 79,62 Z" fill="#1b1d26" stroke="#333846" strokeWidth="1" />
-          <path d="M36,22 C31,23 27,27 25,33 C23,39 25,44 28,47 C30,44 33,35 36,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
-          <path d="M64,22 C69,23 73,27 75,33 C77,39 75,44 72,47 C70,44 67,35 64,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1" />
-          <path d="M50,22 C42,22 36,25 36,36 C36,46 41,52 50,52 C59,52 64,46 64,36 C64,25 58,22 50,22 Z" fill="#1b1d26" stroke="#4e5366" strokeWidth="1.2" />
-          
-          {/* Highlights do Bíceps */}
-          <path d="M25,33 C22,40 20,48 24,54 C27,51 28,42 25,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-          <path d="M75,33 C78,40 80,48 76,54 C73,51 72,42 75,33 Z" fill={fill} opacity={opacity} style={{ transition: 'all 0.5s ease', filter: active ? 'drop-shadow(0 0 5px ' + fill + ')' : 'none' }} />
-        </svg>
-      )
+      image: '/images/muscles/biceps.png'
     },
     {
       id: 'Tríceps',
@@ -350,7 +267,25 @@ export const MuscleMap: React.FC = () => {
         return (
           <div key={muscle.id} className="muscle-card glass-card">
             <div className="muscle-svg-container">
-              {muscle.svg(highlightColor, highlightOpacity, trainedCount > 0)}
+              {muscle.image ? (
+                <img 
+                  src={muscle.image} 
+                  alt={muscle.name} 
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    filter: trainedCount > 0 
+                      ? 'hue-rotate(105deg) saturate(1.8) brightness(1.1) drop-shadow(0 0 6px rgba(16, 185, 129, 0.5))' 
+                      : (hasExercises 
+                        ? 'hue-rotate(240deg) saturate(1.5) brightness(1.1) drop-shadow(0 0 6px rgba(192, 132, 252, 0.4))' 
+                        : 'grayscale(1) opacity(0.22) brightness(0.65)'),
+                    transition: 'all 0.5s ease'
+                  }}
+                />
+              ) : (
+                muscle.svg && muscle.svg(highlightColor, highlightOpacity, trainedCount > 0)
+              )}
             </div>
             
             <div className="muscle-card-info">
