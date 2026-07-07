@@ -31,6 +31,7 @@ export interface WorkoutLogExercise {
   series: number;
   repetitions: string;
   weight: number;
+  rpe?: number;
 }
 
 export interface WorkoutLog {

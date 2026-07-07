@@ -25,6 +25,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
   const bodyCompLogs = db.getBodyCompLogs();
   const races = db.getRaces();
   const workouts = db.getWorkouts();
+  const exercises = db.getExercises();
+
+  // 1RM / Recordes de força
+  const topExercisesPr = useMemo(() => {
+    const safeExs = Array.isArray(exercises) ? exercises : [];
+    return [...safeExs]
+      .filter(ex => ex && ex.prWeight > 0)
+      .sort((a, b) => b.prWeight - a.prWeight)
+      .slice(0, 3);
+  }, [exercises]);
+
+  const getEstimated1RM = (weight: number, repetitionsStr: string) => {
+    const reps = parseInt(repetitionsStr) || 10;
+    return Math.round(weight * (1 + reps / 30));
+  };
 
   // 1. Cálculo de XP Real
   const totalXP = useMemo(() => {
@@ -365,6 +380,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
                 <div className="desc-row">Registre sua biometria na aba Corrida & Corpo</div>
               </div>
             )}
+          </div>
+
+          {/* Card Recordes de Força (PR) */}
+          <div className="glass-card progress-mini-card" onClick={() => setActiveTab('workouts')} style={{ minHeight: '120px' }}>
+            <div className="mini-card-top-icon">
+              <Dumbbell size={18} style={{ color: 'var(--accent-emerald)' }} />
+              <ChevronRight size={16} className="arrow-right-icon" />
+            </div>
+            <div className="mini-card-info-block" style={{ gap: '0.4rem', marginTop: '0.2rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#e2e8f0', textAlign: 'left' }}>
+                🏆 Recordes de Força & 1RM
+              </div>
+              
+              {topExercisesPr.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', width: '100%' }}>
+                  {topExercisesPr.map((ex, idx) => {
+                    const estimated1RM = getEstimated1RM(ex.prWeight, ex.repetitions);
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '0.15rem' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={ex.name}>
+                          {ex.name}
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{ex.prWeight}kg</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>1RM: {estimated1RM}kg</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'left', lineHeight: 1.3 }}>
+                  Conclua treinos com peso para listar seus recordes de força.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>

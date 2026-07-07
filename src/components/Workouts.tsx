@@ -11,9 +11,30 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
-  Activity
+  Activity,
+  Award
 } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+  type ChartOptions
+} from 'chart.js';
+import { Radar } from 'react-chartjs-2';
 import './Styles/workouts.css';
+
+ChartJS.register(
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend
+);
 
 export const Workouts: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'workouts' | 'musclemap'>('workouts');
@@ -32,6 +53,85 @@ export const Workouts: React.FC = () => {
   const [selectedWorkoutForLog, setSelectedWorkoutForLog] = useState<Workout | null>(null);
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [logWeights, setLogWeights] = useState<Record<string, number>>({});
+
+  // Cálculo de volume semanal (séries executadas nos últimos 7 dias) para o Radar Chart
+  const muscleVolumeData = useMemo(() => {
+    const muscles = [
+      'Peitoral', 'Dorsal', 'Trapézio', 'Deltóide', 'Bíceps', 'Tríceps',
+      'Antebraço', 'Abdominal', 'Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilha'
+    ];
+    
+    const volume: Record<string, number> = {};
+    muscles.forEach(m => { volume[m] = 0; });
+
+    const now = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(now.getDate() - 7);
+
+    const safeLogs = Array.isArray(logs) ? logs : [];
+    safeLogs.forEach(log => {
+      const logDateObj = log.date ? new Date(log.date) : null;
+      if (logDateObj && logDateObj >= sevenDaysAgo && Array.isArray(log.exercises)) {
+        log.exercises.forEach(ex => {
+          if (ex && ex.muscleGroup && volume[ex.muscleGroup] !== undefined) {
+            volume[ex.muscleGroup] += Number(ex.series) || 0;
+          }
+        });
+      }
+    });
+
+    return {
+      labels: muscles,
+      datasets: [
+        {
+          label: 'Séries Executadas (Últimos 7 dias)',
+          data: muscles.map(m => volume[m]),
+          backgroundColor: 'rgba(37, 99, 235, 0.15)',
+          borderColor: '#2563eb',
+          borderWidth: 2,
+          pointBackgroundColor: '#2563eb',
+          pointRadius: 3
+        },
+        {
+          label: 'Meta Científica Mínima (Hipertrofia)',
+          data: muscles.map(() => 10),
+          backgroundColor: 'rgba(16, 185, 129, 0.02)',
+          borderColor: 'rgba(16, 185, 129, 0.35)',
+          borderWidth: 1.2,
+          borderDash: [5, 5],
+          pointRadius: 0
+        }
+      ]
+    };
+  }, [logs]);
+
+  const radarOptions: ChartOptions<'radar'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: { color: '#9ba1b0', font: { family: 'Inter', size: 10 } }
+      },
+      tooltip: {
+        backgroundColor: '#141620',
+        titleColor: '#ffffff',
+        bodyColor: '#e2e8f0',
+        borderColor: '#1f2232',
+        borderWidth: 1
+      }
+    },
+    scales: {
+      r: {
+        angleLines: { color: 'rgba(255, 255, 255, 0.02)' },
+        grid: { color: 'rgba(255, 255, 255, 0.02)' },
+        pointLabels: { color: '#9ba1b0', font: { family: 'Inter', size: 9, weight: 600 } },
+        ticks: { display: false },
+        min: 0,
+        suggestedMax: 15
+      }
+    }
+  };
 
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [exerciseForm, setExerciseForm] = useState({
@@ -174,18 +274,23 @@ export const Workouts: React.FC = () => {
   // -------------------------------------------------------------
   // HANDLERS DE HISTÓRICO / REGISTRO
   // -------------------------------------------------------------
+  const [logRpes, setLogRpes] = useState<Record<string, number>>({});
+
   const openLogWorkoutModal = (workout: Workout, e: React.MouseEvent) => {
     e.stopPropagation(); // Evita expandir o card
     setSelectedWorkoutForLog(workout);
     setLogDate(new Date().toISOString().split('T')[0]);
     
-    // Inicializa cargas atuais
+    // Inicializa cargas e RPEs
     const workoutExs = exercises.filter(ex => ex.workoutId === workout.id);
     const initialWeights: Record<string, number> = {};
+    const initialRpes: Record<string, number> = {};
     workoutExs.forEach(ex => {
       initialWeights[ex.id] = ex.prWeight || 0;
+      initialRpes[ex.id] = 8; // RPE padrão = 8
     });
     setLogWeights(initialWeights);
+    setLogRpes(initialRpes);
     setIsLogModalOpen(true);
   };
 
@@ -199,7 +304,8 @@ export const Workouts: React.FC = () => {
       muscleGroup: ex.muscleGroup,
       series: ex.series,
       repetitions: ex.repetitions,
-      weight: logWeights[ex.id] || 0
+      weight: logWeights[ex.id] || 0,
+      rpe: logRpes[ex.id] || 8
     }));
 
     db.addWorkoutLog({
@@ -344,16 +450,32 @@ export const Workouts: React.FC = () => {
       </div>
 
       {activeSubTab === 'musclemap' ? (
-        <section className="glass-card" style={{ padding: '2rem' }}>
-          <h2 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertCircle size={20} color="var(--accent-emerald)" />
-            Frequência de Grupos Musculares Trabalhados
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Os cards abaixo mostram o volume teórico nos treinos cadastrados (roxo) e quantas vezes foram ativados no histórico de execuções (verde).
-          </p>
-          <MuscleMap />
-        </section>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Gráfico de Radar de Volume Semanal */}
+          <section className="glass-card" style={{ padding: '2rem' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+              <Award size={20} color="var(--accent-blue)" />
+              Volume de Séries por Grupo Muscular
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              Distribuição semanal de séries completadas nos últimos 7 dias comparada com a meta científica mínima (10 séries).
+            </p>
+            <div style={{ height: '320px', position: 'relative' }}>
+              <Radar data={muscleVolumeData} options={radarOptions} />
+            </div>
+          </section>
+
+          <section className="glass-card" style={{ padding: '2rem' }}>
+            <h2 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+              <AlertCircle size={20} color="var(--accent-emerald)" />
+              Frequência de Grupos Musculares Trabalhados
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              Os cards abaixo mostram o volume teórico nos treinos cadastrados (azul/roxo) e quantas vezes foram ativados no histórico de execuções (verde).
+            </p>
+            <MuscleMap />
+          </section>
+        </div>
       ) : (
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {workouts.length > 0 && (
@@ -736,24 +858,46 @@ export const Workouts: React.FC = () => {
                 <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Anote as Cargas Concluídas (kg)</h4>
                 
                 {exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id).map(ex => (
-                  <div key={ex.id} className="flex-between" style={{ background: 'rgba(0,0,0,0.15)', padding: '0.65rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ textAlign: 'left' }}>
+                  <div key={ex.id} className="flex-between" style={{ background: 'rgba(0,0,0,0.15)', padding: '0.65rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div style={{ textAlign: 'left', flex: 1, minWidth: '150px' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{ex.name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR Anterior: {ex.prWeight > 0 ? `${ex.prWeight}kg` : 'Nenhum'}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR: {ex.prWeight > 0 ? `${ex.prWeight}kg` : 'Nenhum'}</div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input 
-                        type="number" 
-                        min="0"
-                        className="form-control" 
-                        style={{ width: '80px', height: '36px', textAlign: 'center', padding: '0.25rem' }}
-                        value={logWeights[ex.id] || ''}
-                        onChange={(e) => setLogWeights({
-                          ...logWeights,
-                          [ex.id]: Number(e.target.value)
-                        })}
-                        placeholder="kg"
-                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Peso (kg)</span>
+                        <input 
+                          type="number" 
+                          min="0"
+                          className="form-control" 
+                          style={{ width: '80px', height: '36px', textAlign: 'center', padding: '0.25rem' }}
+                          value={logWeights[ex.id] || ''}
+                          onChange={(e) => setLogWeights({
+                            ...logWeights,
+                            [ex.id]: Number(e.target.value)
+                          })}
+                          placeholder="kg"
+                        />
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Esforço RPE</span>
+                        <select 
+                          className="form-control" 
+                          style={{ width: '105px', height: '36px', fontSize: '0.75rem', padding: '0 0.25rem', background: 'var(--bg-card)' }}
+                          value={logRpes[ex.id] || 8}
+                          onChange={(e) => setLogRpes({
+                            ...logRpes,
+                            [ex.id]: Number(e.target.value)
+                          })}
+                        >
+                          <option value="10">10 (Máximo)</option>
+                          <option value="9">9 (1 Rep. Res.)</option>
+                          <option value="8">8 (2 Rep. Res.)</option>
+                          <option value="7">7 (3 Rep. Res.)</option>
+                          <option value="6">6 (Aquecim.)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 ))}
