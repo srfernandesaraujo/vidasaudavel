@@ -11,33 +11,13 @@ import {
   Activity,
   Award
 } from 'lucide-react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  type ChartOptions
-} from 'chart.js';
+import { Chart as ChartJS, registerables, type ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import confetti from 'canvas-confetti';
 import './Styles/runtracker.css';
 
 // Registra módulos do Chart.js
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+ChartJS.register(...registerables);
 
 export const RunTracker: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'runs' | 'bodycomp'>('runs');

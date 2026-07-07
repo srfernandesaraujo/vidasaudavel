@@ -14,28 +14,12 @@ import {
   Activity,
   Award
 } from 'lucide-react';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-  type ChartOptions
-} from 'chart.js';
+import { Chart as ChartJS, registerables, type ChartOptions } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
 import confetti from 'canvas-confetti';
 import './Styles/workouts.css';
 
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
+ChartJS.register(...registerables);
 
 export const Workouts: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'workouts' | 'musclemap'>('workouts');
