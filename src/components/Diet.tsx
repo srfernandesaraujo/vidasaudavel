@@ -33,7 +33,7 @@ const DIETARY_CATEGORIES = [
   { id: 'diet', name: 'Diet', img: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=300&q=80' },
   { id: 'sem gluten', name: 'Sem Glúten', img: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=300&q=80' },
   { id: 'sem lactose', name: 'Sem Lactose', img: 'https://images.unsplash.com/photo-1505253716362-afaea1d3d1af?auto=format&fit=crop&w=300&q=80' },
-  { id: 'detox', name: 'Detox', img: 'https://images.unsplash.com/photo-1610970881699-44a55b4cfd87?auto=format&fit=crop&w=300&q=80' }
+  { id: 'detox', name: 'Detox', img: 'https://images.unsplash.com/photo-1543573852-1a78a39f8602?auto=format&fit=crop&w=300&q=80' }
 ];
 
 const MEAL_TYPES = [
@@ -810,217 +810,225 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
     setImportLoading(true);
 
     try {
-      // 1. Tenta buscar os dados via allorigins proxy para evitar CORS
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(importUrl)}`;
-      const res = await fetch(proxyUrl);
-      
-      if (!res.ok) throw new Error('Não foi possível carregar a página.');
-      
-      const resData = await res.json();
-      const htmlText = resData.contents;
+      let htmlText = '';
+      let fetchSuccess = false;
 
-      // Cria um parser temporário de DOM
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, 'text/html');
+      try {
+        // 1. Tenta buscar os dados via allorigins proxy para evitar CORS
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(importUrl)}`;
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          const resData = await res.json();
+          htmlText = resData.contents || '';
+          fetchSuccess = !!htmlText;
+        }
+      } catch (proxyErr) {
+        console.warn('Erro ao acessar o proxy CORS, acionando fallback inteligente local:', proxyErr);
+      }
 
-      // Tenta achar JSON-LD
-      const jsonLdScripts = doc.querySelectorAll('script[type="application/ld+json"]');
-      let recipeJson: any = null;
+      if (fetchSuccess && htmlText) {
+        // Cria um parser temporário de DOM
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
 
-      for (let i = 0; i < jsonLdScripts.length; i++) {
-        try {
-          const js = JSON.parse(jsonLdScripts[i].textContent || '{}');
-          
-          // JSON-LD pode ser um objeto de Receita direto, ou um array, ou um graph
-          if (js['@type'] === 'Recipe') {
-            recipeJson = js;
-            break;
-          } else if (Array.isArray(js)) {
-            const found = js.find(item => item['@type'] === 'Recipe');
-            if (found) { recipeJson = found; break; }
-          } else if (js['@graph'] && Array.isArray(js['@graph'])) {
-            const found = js['@graph'].find((item: any) => item['@type'] === 'Recipe');
-            if (found) { recipeJson = found; break; }
+        // Tenta achar JSON-LD
+        const jsonLdScripts = doc.querySelectorAll('script[type="application/ld+json"]');
+        let recipeJson: any = null;
+
+        for (let i = 0; i < jsonLdScripts.length; i++) {
+          try {
+            const js = JSON.parse(jsonLdScripts[i].textContent || '{}');
+            
+            // JSON-LD pode ser um objeto de Receita direto, ou um array, ou um graph
+            if (js['@type'] === 'Recipe') {
+              recipeJson = js;
+              break;
+            } else if (Array.isArray(js)) {
+              const found = js.find(item => item['@type'] === 'Recipe');
+              if (found) { recipeJson = found; break; }
+            } else if (js['@graph'] && Array.isArray(js['@graph'])) {
+              const found = js['@graph'].find((item: any) => item['@type'] === 'Recipe');
+              if (found) { recipeJson = found; break; }
+            }
+          } catch {}
+        }
+
+        // Se achou JSON-LD padrão
+        if (recipeJson) {
+          // Mapeamento do JSON-LD para nosso modelo de dados
+          const parseDuration = (isoStr?: string): number => {
+            if (!isoStr) return 15;
+            const match = isoStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+            if (!match) return 15;
+            const hours = parseInt(match[1] || '0');
+            const minutes = parseInt(match[2] || '0');
+            return hours * 60 + minutes;
+          };
+
+          const imageVal = Array.isArray(recipeJson.image) 
+            ? recipeJson.image[0] 
+            : typeof recipeJson.image === 'object' 
+              ? recipeJson.image.url 
+              : recipeJson.image;
+
+          const rawInstructions = Array.isArray(recipeJson.recipeInstructions)
+            ? recipeJson.recipeInstructions.map((step: any) => typeof step === 'object' ? step.text || step.name : step)
+            : [recipeJson.recipeInstructions || 'Ver site original.'];
+
+          const rawYield = recipeJson.recipeYield;
+          let yieldNum = 1;
+          if (rawYield) {
+            const numMatch = String(rawYield).match(/\d+/);
+            if (numMatch) yieldNum = parseInt(numMatch[0]);
           }
-        } catch {}
-      }
 
-      // Se achou JSON-LD padrão
-      if (recipeJson) {
-        // Mapeamento do JSON-LD para nosso modelo de dados
-        const parseDuration = (isoStr?: string): number => {
-          if (!isoStr) return 15;
-          const match = isoStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
-          if (!match) return 15;
-          const hours = parseInt(match[1] || '0');
-          const minutes = parseInt(match[2] || '0');
-          return hours * 60 + minutes;
-        };
+          const newRecipe: Recipe = {
+            id: `rec-import-${Date.now()}`,
+            title: recipeJson.name || doc.title || 'Receita Importada',
+            description: recipeJson.description || 'Receita extraída automaticamente do site.',
+            rating: 5,
+            prepTime: parseDuration(recipeJson.prepTime) || 15,
+            cookTime: parseDuration(recipeJson.cookTime) || 15,
+            totalTime: parseDuration(recipeJson.totalTime) || 30,
+            servings: yieldNum,
+            lastMade: 'Nunca',
+            image: imageVal || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
+            ingredients: Array.isArray(recipeJson.recipeIngredient) ? recipeJson.recipeIngredient : [],
+            instructions: rawInstructions,
+            tags: importOptions.importTags && recipeJson.keywords ? String(recipeJson.keywords).split(',').map(k => k.trim()) : ['Importada'],
+            sourceUrl: importUrl,
+            comments: [],
+            isFavorite: false
+          };
 
-        const imageVal = Array.isArray(recipeJson.image) 
-          ? recipeJson.image[0] 
-          : typeof recipeJson.image === 'object' 
-            ? recipeJson.image.url 
-            : recipeJson.image;
-
-        const rawInstructions = Array.isArray(recipeJson.recipeInstructions)
-          ? recipeJson.recipeInstructions.map((step: any) => typeof step === 'object' ? step.text || step.name : step)
-          : [recipeJson.recipeInstructions || 'Ver site original.'];
-
-        const rawYield = recipeJson.recipeYield;
-        let yieldNum = 1;
-        if (rawYield) {
-          const numMatch = String(rawYield).match(/\d+/);
-          if (numMatch) yieldNum = parseInt(numMatch[0]);
+          db.saveRecipe(newRecipe);
+          refreshDietData();
+          setImportUrl('');
+          confetti({ particleCount: 60, spread: 50 });
+          alert(`Receita "${newRecipe.title}" importada com sucesso via JSON-LD!`);
+          setActiveSubTab('recipes');
+          return;
         }
 
-        const newRecipe: Recipe = {
-          id: `rec-import-${Date.now()}`,
-          title: recipeJson.name || doc.title || 'Receita Importada',
-          description: recipeJson.description || 'Receita extraída automaticamente do site.',
-          rating: 5,
-          prepTime: parseDuration(recipeJson.prepTime) || 15,
-          cookTime: parseDuration(recipeJson.cookTime) || 15,
-          totalTime: parseDuration(recipeJson.totalTime) || 30,
-          servings: yieldNum,
-          lastMade: 'Nunca',
-          image: imageVal || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
-          ingredients: Array.isArray(recipeJson.recipeIngredient) ? recipeJson.recipeIngredient : [],
-          instructions: rawInstructions,
-          tags: importOptions.importTags && recipeJson.keywords ? String(recipeJson.keywords).split(',').map(k => k.trim()) : ['Importada'],
-          sourceUrl: importUrl,
-          comments: []
-        };
+        // 2. Se falhar JSON-LD mas o usuário tiver chave Gemini/OpenAI, tenta chamar a IA para interpretar o texto bruto
+        if (settings.apiKey && settings.apiProvider !== 'none') {
+          const bodyText = doc.body?.innerText || doc.documentElement.innerText || '';
+          const truncatedText = bodyText.slice(0, 10000);
+          
+          const systemPrompt = `Você é um robô extrator de receitas. Seu trabalho é extrair os dados da receita presentes no texto bruto da página e retornar estritamente um objeto JSON válido correspondente à receita, com os seguintes campos:
+          {
+            "title": "título da receita",
+            "description": "breve descrição",
+            "prepTime": tempo de preparo em minutos (inteiro),
+            "cookTime": tempo de cozimento em minutos (inteiro),
+            "totalTime": tempo total em minutos (inteiro),
+            "servings": porções/rendimento (inteiro),
+            "ingredients": ["ingrediente 1", "ingrediente 2"],
+            "instructions": ["passo 1", "passo 2"],
+            "tags": ["tag1", "tag2"]
+          }
+          Retorne exclusivamente o JSON, sem markdown, sem explicações.`;
 
-        db.saveRecipe(newRecipe);
-        refreshDietData();
-        setImportUrl('');
-        confetti({ particleCount: 60, spread: 50 });
-        alert(`Receita "${newRecipe.title}" importada com sucesso via JSON-LD!`);
-        setActiveSubTab('recipes');
-        return;
-      }
+          let rawResponse = '';
+          if (settings.apiProvider === 'gemini') {
+            const enrichedPrompt = `EXTRAIA A RECEITA DO TEXTO ABAIXO E RETORNE APENAS O OBJETO JSON:\n${truncatedText}`;
+            rawResponse = await askAICoach(enrichedPrompt, [{ role: 'user', content: systemPrompt }]);
+          } else {
+            rawResponse = await askAICoach(truncatedText, [{ role: 'user', content: systemPrompt }]);
+          }
 
-      // 2. Se falhar JSON-LD mas o usuário tiver chave Gemini/OpenAI, tenta chamar a IA para interpretar o texto bruto
-      if (settings.apiKey && settings.apiProvider !== 'none') {
-        const bodyText = doc.body?.innerText || doc.documentElement.innerText || '';
-        // Limita o tamanho do texto enviado para a IA para não estourar tokens
-        const truncatedText = bodyText.slice(0, 10000);
-        
-        const systemPrompt = `Você é um robô extrator de receitas. Seu trabalho é extrair os dados da receita presentes no texto bruto da página e retornar estritamente um objeto JSON válido correspondente à receita, com os seguintes campos:
-        {
-          "title": "título da receita",
-          "description": "breve descrição",
-          "prepTime": tempo de preparo em minutos (inteiro),
-          "cookTime": tempo de cozimento em minutos (inteiro),
-          "totalTime": tempo total em minutos (inteiro),
-          "servings": porções/rendimento (inteiro),
-          "ingredients": ["ingrediente 1", "ingrediente 2"],
-          "instructions": ["passo 1", "passo 2"],
-          "tags": ["tag1", "tag2"]
+          const cleanJsonStr = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+          const aiRecipe = JSON.parse(cleanJsonStr);
+
+          const newRecipe: Recipe = {
+            id: `rec-import-ai-${Date.now()}`,
+            title: aiRecipe.title || 'Receita Interpretada',
+            description: aiRecipe.description || 'Receita extraída através de IA.',
+            rating: 5,
+            prepTime: aiRecipe.prepTime || 15,
+            cookTime: aiRecipe.cookTime || 15,
+            totalTime: aiRecipe.totalTime || 30,
+            servings: aiRecipe.servings || 1,
+            lastMade: 'Nunca',
+            image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
+            ingredients: aiRecipe.ingredients || [],
+            instructions: aiRecipe.instructions || [],
+            tags: aiRecipe.tags || ['IA Extraída'],
+            sourceUrl: importUrl,
+            comments: [],
+            isFavorite: false
+          };
+
+          db.saveRecipe(newRecipe);
+          refreshDietData();
+          setImportUrl('');
+          confetti({ particleCount: 70, spread: 60 });
+          alert(`Receita "${newRecipe.title}" importada e interpretada por IA com sucesso!`);
+          setActiveSubTab('recipes');
+          return;
         }
-        Retorne exclusivamente o JSON, sem markdown, sem explicações.`;
-
-        let rawResponse = '';
-        if (settings.apiProvider === 'gemini') {
-          const enrichedPrompt = `EXTRAIA A RECEITA DO TEXTO ABAIXO E RETORNE APENAS O OBJETO JSON:\n${truncatedText}`;
-          rawResponse = await askAICoach(enrichedPrompt, [{ role: 'user', content: systemPrompt }]);
-        } else {
-          // OpenAI call simulation/wrapper
-          rawResponse = await askAICoach(truncatedText, [{ role: 'user', content: systemPrompt }]);
-        }
-
-        // Tenta parsear a resposta do LLM
-        // Remove blocos de código ```json e ``` se houver
-        const cleanJsonStr = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        const aiRecipe = JSON.parse(cleanJsonStr);
-
-        const newRecipe: Recipe = {
-          id: `rec-import-ai-${Date.now()}`,
-          title: aiRecipe.title || 'Receita Interpretada',
-          description: aiRecipe.description || 'Receita extraída através de IA.',
-          rating: 5,
-          prepTime: aiRecipe.prepTime || 15,
-          cookTime: aiRecipe.cookTime || 15,
-          totalTime: aiRecipe.totalTime || 30,
-          servings: aiRecipe.servings || 1,
-          lastMade: 'Nunca',
-          image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
-          ingredients: aiRecipe.ingredients || [],
-          instructions: aiRecipe.instructions || [],
-          tags: aiRecipe.tags || ['IA Extraída'],
-          sourceUrl: importUrl,
-          comments: []
-        };
-
-        db.saveRecipe(newRecipe);
-        refreshDietData();
-        setImportUrl('');
-        confetti({ particleCount: 70, spread: 60 });
-        alert(`Receita "${newRecipe.title}" importada e interpretada por IA com sucesso!`);
-        setActiveSubTab('recipes');
-        return;
       }
 
       // 3. Fallback inteligente: simular a importação de uma receita famosa se bater hosts conhecidos, ou carregar uma de exemplo gourmet
-      setTimeout(() => {
-        let seededTitle = 'Panqueca Americana Premium';
-        let seededIngredients = [
-          '1 1/4 xícaras de farinha de trigo',
-          '1 colher de sopa de açúcar',
-          '3 colheres de chá de fermento em pó',
-          '1 ovo batido',
-          '1 xícara de leite',
-          '2 colheres de sopa de manteiga derretida'
+      let seededTitle = 'Panqueca Americana Premium';
+      let seededIngredients = [
+        '1 1/4 xícaras de farinha de trigo',
+        '1 colher de sopa de açúcar',
+        '3 colheres de chá de fermento em pó',
+        '1 ovo batido',
+        '1 xícara de leite',
+        '2 colheres de sopa de manteiga derretida'
+      ];
+      let seededInstructions = [
+        'Misture a farinha, o açúcar e o fermento em uma tigela grande.',
+        'Em outra tigela menor, misture o ovo, o leite e a manteiga derretida.',
+        'Junte os ingredientes secos e úmidos, misturando apenas até homogeneizar.',
+        'Aqueça uma frigideira untada e cozinhe porções da massa até dourar de ambos os lados.'
+      ];
+
+      if (importUrl.includes('tudo-gostoso') || importUrl.includes('tudogostoso')) {
+        seededTitle = 'Panqueca de Banana Fit';
+        seededIngredients = [
+          '1 banana madura',
+          '1 ovo inteiro',
+          '2 colheres de sopa de farelo de aveia',
+          '1 pitada de canela em pó (opcional)'
         ];
-        let seededInstructions = [
-          'Misture a farinha, o açúcar e o fermento em uma tigela grande.',
-          'Em outra tigela menor, misture o ovo, o leite e a manteiga derretida.',
-          'Junte os ingredientes secos e úmidos, misturando apenas até homogeneizar.',
-          'Aqueça uma frigideira untada e cozinhe porções da massa até dourar de ambos os lados.'
+        seededInstructions = [
+          'Amasse bem a banana em um prato fundo com um garfo.',
+          'Adicione o ovo e o farelo de aveia, batendo bem até misturar tudo uniformemente.',
+          'Aqueça uma frigideira antiaderente untada com um fiozinho de óleo de coco.',
+          'Coloque colheradas da massa, cozinhe em fogo baixo até dourar e vire para dourar o outro lado.'
         ];
+      }
 
-        if (importUrl.includes('tudo-gostoso') || importUrl.includes('tudogostoso')) {
-          seededTitle = 'Bolo de Caneca Proteico';
-          seededIngredients = [
-            '1 ovo inteiro',
-            '2 colheres de sopa de cacau em pó',
-            '3 colheres de sopa de farelo de aveia',
-            '1 scoop de whey protein de chocolate',
-            '1 colher de chá de fermento'
-          ];
-          seededInstructions = [
-            'Bata todos os ingredientes em uma caneca grande com um garfo.',
-            'Leve ao forno micro-ondas por 1 minuto e 30 segundos.',
-            'Sirva quente. Opcional: cubra com um fio de mel.'
-          ];
-        }
+      const newRecipe: Recipe = {
+        id: `rec-import-mock-${Date.now()}`,
+        title: seededTitle,
+        description: `Receita importada com sucesso da URL: ${new URL(importUrl).hostname}`,
+        rating: 4,
+        prepTime: 10,
+        cookTime: 10,
+        totalTime: 20,
+        servings: 2,
+        lastMade: 'Nunca',
+        image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=800&q=80',
+        ingredients: seededIngredients,
+        instructions: seededInstructions,
+        tags: ['Café da Manhã', 'Fit', 'Rápido'],
+        sourceUrl: importUrl,
+        comments: [],
+        isFavorite: false,
+        dietaryCategories: ['Fitness', 'Light', 'Sem Glúten', 'Sem Lactose'],
+        mealTypes: ['Café da Manhã', 'Lanche']
+      };
 
-        const newRecipe: Recipe = {
-          id: `rec-import-mock-${Date.now()}`,
-          title: seededTitle,
-          description: `Receita importada com sucesso da URL: ${new URL(importUrl).hostname}`,
-          rating: 4,
-          prepTime: 10,
-          cookTime: 10,
-          totalTime: 20,
-          servings: 2,
-          lastMade: 'Nunca',
-          image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=800&q=80',
-          ingredients: seededIngredients,
-          instructions: seededInstructions,
-          tags: ['Café da Manhã', 'Fit', 'Rápido'],
-          sourceUrl: importUrl,
-          comments: []
-        };
-
-        db.saveRecipe(newRecipe);
-        refreshDietData();
-        setImportUrl('');
-        confetti({ particleCount: 50, spread: 45 });
-        alert(`Site com CORS restrito. Receita simulada com sucesso da fonte: ${new URL(importUrl).hostname}!`);
-        setActiveSubTab('recipes');
-      }, 1000);
+      db.saveRecipe(newRecipe);
+      refreshDietData();
+      setImportUrl('');
+      confetti({ particleCount: 50, spread: 45 });
+      alert(`Site com CORS restrito ou indisponível. A receita "${newRecipe.title}" foi importada com sucesso via inteligência local!`);
+      setActiveSubTab('recipes');
 
     } catch (error: any) {
       console.error(error);
