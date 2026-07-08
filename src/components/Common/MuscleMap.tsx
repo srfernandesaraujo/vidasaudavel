@@ -209,8 +209,8 @@ export const MuscleMap: React.FC = () => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
-                  clipPath: 'inset(18% 0px 0px 0px)', // Recorta os 18% do topo onde fica o texto da imagem original
-                  transform: 'scale(1.25) translateY(10px)', // Dá zoom e recentraliza o músculo sem o texto
+                  clipPath: 'inset(25% 0px 0px 0px)', // Recorta os 25% do topo onde fica o texto da imagem original
+                  transform: 'scale(1.3) translateY(15px)', // Dá zoom e recentraliza o músculo sem o texto
                   filter: imageFilter,
                   transition: 'all 0.4s ease'
                 }}
