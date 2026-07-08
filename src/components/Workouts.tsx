@@ -613,11 +613,10 @@ export const Workouts: React.FC = () => {
                 const workoutExs = exercises.filter(e => e.workoutId === workout.id);
                 
                 // Calcula músculos trabalhados dinamicamente para o cabeçalho do card
-                const workedMuscles = useMemo(() => {
-                  if (workoutExs.length === 0) return 'Sem exercícios';
-                  const muscles = Array.from(new Set(workoutExs.map(e => e.muscleGroup)));
-                  return muscles.slice(0, 3).join(' • ') + (muscles.length > 3 ? '...' : '');
-                }, [workoutExs]);
+                const musclesUnique = Array.from(new Set(workoutExs.map(e => e.muscleGroup).filter(Boolean)));
+                const workedMuscles = musclesUnique.length === 0 
+                  ? 'Sem exercícios' 
+                  : musclesUnique.slice(0, 3).join(' • ') + (musclesUnique.length > 3 ? '...' : '');
 
                 const isExpanded = !!expandedWorkouts[workout.id];
                 const suggestedDay = getSuggestedDay(workout.name, index);
