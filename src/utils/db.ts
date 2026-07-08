@@ -92,6 +92,8 @@ export interface UserSettings {
   apiProvider: 'gemini' | 'openai' | 'none';
   emailForList?: string;
   resendApiKey?: string;
+  carbCyclingMode?: 'none' | 'auto';
+  tdeeMode?: 'none' | 'auto';
 }
 
 export interface Recipe {
@@ -199,6 +201,8 @@ const INITIAL_SETTINGS: UserSettings = {
   apiProvider: 'none',
   emailForList: '',
   resendApiKey: '',
+  carbCyclingMode: 'auto',
+  tdeeMode: 'auto',
 };
 
 const INITIAL_RECIPES: Recipe[] = [

@@ -408,8 +408,18 @@ function generateNutritionSystemPrompt(contextData: {
   const settings = db.getSettings();
 
   const latestBody = bodyCompLogs[bodyCompLogs.length - 1];
+
+  let weightTrendText = 'Sem histórico de peso suficiente.';
+  if (bodyCompLogs.length >= 2) {
+    const sorted = [...bodyCompLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const firstWeight = sorted[0].weight;
+    const lastWeight = sorted[sorted.length - 1].weight;
+    const diff = lastWeight - firstWeight;
+    weightTrendText = `${diff > 0 ? '+' : ''}${diff.toFixed(1)} kg (Inicial: ${firstWeight} kg -> Atual: ${lastWeight} kg).`;
+  }
+
   const formattedBody = latestBody 
-    ? `Peso: ${latestBody.weight}kg (Meta: ${latestBody.idealWeight}kg), Gordura: ${latestBody.bodyFat}% (Meta: ${latestBody.bodyFatGoal}%), Massa Muscular: ${latestBody.muscleMass}kg (Meta: ${latestBody.muscleMassGoal}%), Água: ${latestBody.bodyWater}%, TMB (Taxa Metabólica Basal): ${latestBody.basalMetabolism} kcal, Gordura Visceral: ${latestBody.visceralFat} (Meta: ${latestBody.visceralFatGoal}), Idade Metabólica: ${latestBody.metabolicAge} anos.`
+    ? `Peso: ${latestBody.weight}kg (Meta: ${latestBody.idealWeight}kg), Gordura: ${latestBody.bodyFat}% (Meta: ${latestBody.bodyFatGoal}%), Massa Muscular: ${latestBody.muscleMass}kg (Meta: ${latestBody.muscleMassGoal}%), Água: ${latestBody.bodyWater}%, TMB (Taxa Metabólica Basal): ${latestBody.basalMetabolism} kcal, Gordura Visceral: ${latestBody.visceralFat} (Meta: ${latestBody.visceralFatGoal}), Idade Metabólica: ${latestBody.metabolicAge} anos. Tendência de peso recente: ${weightTrendText}`
     : 'Nenhum registro de composição corporal (bioimpedância) cadastrado.';
 
   // Gasto recente
@@ -570,4 +580,68 @@ export async function askAINutritionist(userMessage: string, history: ChatMessag
     }, 800); // delay leve para simular processamento
   });
 }
+
+export async function parseMealImage(base64Image: string): Promise<{
+  title: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}> {
+  const settings = db.getSettings();
+  if (!settings.apiKey || settings.apiProvider !== 'gemini') {
+    throw new Error('A análise visual de pratos requer o provedor Gemini e uma chave de API válida cadastrada.');
+  }
+
+  // Remove o prefixo data:image/...;base64, se houver
+  const base64Data = base64Image.includes(';base64,') 
+    ? base64Image.split(';base64,')[1] 
+    : base64Image;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.apiKey}`;
+  
+  const payload = {
+    contents: [{
+      parts: [
+        {
+          text: `Você é um robô nutricionista com visão computacional avançada. Identifique o alimento ou prato nesta imagem e estime seu peso e macronutrientes.
+Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown ou qualquer texto adicional:
+{
+  "title": "Nome do Prato/Alimento Estimado",
+  "calories": 450,
+  "protein": 30,
+  "carbs": 40,
+  "fat": 15
+}`
+        },
+        {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Data
+          }
+        }
+      ]
+    }]
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `Erro Gemini Vision API: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Não foi possível obter resposta da visão computacional.');
+
+  // Limpa blocos de código markdown se o modelo retornar
+  const cleanJsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(cleanJsonStr);
+}
+
 

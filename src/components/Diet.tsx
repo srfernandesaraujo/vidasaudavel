@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { db, type Recipe, type MealPlan, type FoodLog, type FoodLogItem, type BodyCompLog } from '../utils/db';
-import { askAINutritionist, askAICoach, type ChatMessage } from '../utils/aiEngine';
+import { askAINutritionist, askAICoach, parseMealImage, type ChatMessage } from '../utils/aiEngine';
 import { 
   Apple, 
   Calendar, 
@@ -21,13 +21,15 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Styles/diet.css';
-
 export const Diet: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'daily' | 'planner' | 'recipes' | 'import' | 'shopping' | 'nutri_ai'>('daily');
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [recipes, setRecipes] = useState<Recipe[]>(db.getRecipes());
   const [mealPlans, setMealPlans] = useState<MealPlan[]>(db.getMealPlans());
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>(db.getFoodLogs());
   const [bodyCompLogs] = useState<BodyCompLog[]>(db.getBodyCompLogs());
+  const [workoutLogs] = useState(() => db.getWorkoutLogs());
+  const [runLogs] = useState(() => db.getRunLogs());
   const settings = db.getSettings();
 
   const latestBody = useMemo(() => {
@@ -45,25 +47,87 @@ export const Diet: React.FC = () => {
   // -------------------------------------------------------------
   // DIÁRIO DE MACRONUTRIENTES
   // -------------------------------------------------------------
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const todayLog = useMemo(() => {
     return foodLogs.find(log => log.date === todayStr) || { id: todayStr, date: todayStr, items: [] };
   }, [foodLogs, todayStr]);
 
-  // Metas nutricionais baseadas na bioimpedância
+  // Treinos e corridas de hoje para TDEE
+  const todayWorkouts = useMemo(() => {
+    return workoutLogs.filter(log => log.date === todayStr);
+  }, [workoutLogs, todayStr]);
+
+  const todayRuns = useMemo(() => {
+    return runLogs.filter(log => log.date === todayStr);
+  }, [runLogs, todayStr]);
+
+  // Calorias gastas hoje com atividade
+  const activeCaloriesBurned = useMemo(() => {
+    const weight = latestBody ? latestBody.weight : 70;
+    
+    // Gasto na corrida: Peso * Distancia * 1.03 ou calorias do log
+    const runKcal = todayRuns.reduce((acc, run) => {
+      return acc + (run.calories || Math.round(weight * run.distance * 1.03));
+    }, 0);
+
+    // Gasto na musculação: 250 kcal por treino
+    const workoutKcal = todayWorkouts.length * 250;
+
+    return runKcal + workoutKcal;
+  }, [todayRuns, todayWorkouts, latestBody]);
+
+  // Tipo de dia no Carb Cycling
+  const carbCyclingDayType = useMemo(() => {
+    if (settings.carbCyclingMode === 'none') return 'medium';
+
+    // Determina se hoje teve treino pesado (leg day / treino B) ou corrida longa (>5k)
+    const hasHeavyWorkout = todayWorkouts.some(w => {
+      const nameLower = w.workoutName.toLowerCase();
+      return nameLower.includes('perna') || nameLower.includes('inferior') || nameLower.includes('treino b') || nameLower.includes('quadriceps');
+    });
+    const hasLongRun = todayRuns.some(r => r.distance >= 5.0);
+
+    if (hasHeavyWorkout || hasLongRun) return 'high';
+    if (todayWorkouts.length > 0 || todayRuns.length > 0) return 'medium';
+    return 'low'; // Descanso
+  }, [todayWorkouts, todayRuns, settings.carbCyclingMode]);
+
+  // Metas nutricionais baseadas na bioimpedância, TDEE ativo e Carb Cycling
   const targetMacros = useMemo(() => {
     const weight = latestBody ? latestBody.weight : settings.height > 100 ? (settings.height - 100) * 0.9 : 70;
     const bmr = latestBody?.basalMetabolism || 1600;
     
-    // Gasto extra estimado baseado nos treinos da semana
-    const activeFactor = 1.3; // Fator de atividade ativa leve/moderada padrão
-    const calories = Math.round(bmr * activeFactor);
-    const protein = Math.round(weight * 2.0); // 2.0g por kg
-    const fat = Math.round(weight * 0.8);      // 0.8g por kg
-    const carbs = Math.round((calories - (protein * 4) - (fat * 9)) / 4);
+    // Alvo calórico base com fator de atividade leve padrão
+    const baseCalories = Math.round(bmr * 1.3);
+    
+    // Adiciona TDEE ativo se configurado
+    const extraCalories = settings.tdeeMode === 'auto' ? activeCaloriesBurned : 0;
+    let calories = baseCalories + extraCalories;
+    
+    let protein = Math.round(weight * 2.0); // 2.0g/kg
+    let fat = Math.round(weight * 0.8);      // 0.8g/kg (Padrão)
 
-    return { calories, protein, carbs, fat };
-  }, [latestBody, settings]);
+    // Ajusta macros com base no Carb Cycling
+    if (settings.carbCyclingMode === 'auto') {
+      if (carbCyclingDayType === 'high') {
+        fat = Math.round(weight * 0.6); // Reduz gorduras
+      } else if (carbCyclingDayType === 'low') {
+        calories = Math.round(calories * 0.9); // Leve déficit no repouso
+        fat = Math.round(weight * 1.0); // Aumenta gorduras
+      }
+    }
+
+    const carbs = Math.max(20, Math.round((calories - (protein * 4) - (fat * 9)) / 4));
+
+    // Alvo de água: 2.5L base + acréscimo de suor por treino
+    let waterTarget = 2500;
+    if (settings.tdeeMode === 'auto') {
+      waterTarget += todayWorkouts.length * 500;
+      const totalDist = todayRuns.reduce((acc, r) => acc + r.distance, 0);
+      waterTarget += Math.round(totalDist * 100); // 500ml a cada 5km
+    }
+
+    return { calories, protein, carbs, fat, waterTarget };
+  }, [latestBody, settings, activeCaloriesBurned, carbCyclingDayType, todayWorkouts, todayRuns]);
 
   // Macros consumidos hoje
   const consumedMacros = useMemo(() => {
@@ -82,6 +146,52 @@ export const Diet: React.FC = () => {
     return { calories, protein, carbs, fat };
   }, [todayLog]);
 
+  // Detector de Platô Fisiológico (baseado em logs das últimas 2 semanas)
+  const plateauStatus = useMemo(() => {
+    if (!bodyCompLogs || bodyCompLogs.length < 3) return null;
+    const sorted = [...bodyCompLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const oldest = sorted[0];
+    const newest = sorted[sorted.length - 1];
+    
+    const daysDiff = (new Date(newest.date).getTime() - new Date(oldest.date).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff < 7) return null;
+
+    const weightDiff = Math.abs(newest.weight - oldest.weight);
+    if (weightDiff < 0.25) {
+      return {
+        detected: true,
+        message: `Seu peso variou apenas ${weightDiff.toFixed(2)} kg nos últimos ${Math.round(daysDiff)} dias. Isso indica um platô metabólico de estagnação.`,
+        actionType: newest.weight > (newest.idealWeight || 70) ? 'cut' : 'bulk'
+      };
+    }
+    return null;
+  }, [bodyCompLogs]);
+
+  // Recomendações Automáticas de Suplementação Saudável por Fadiga/Desidratação
+  const autoSupplements = useMemo(() => {
+    const items: string[] = [];
+    if (latestBody && latestBody.bodyWater < 55) {
+      items.push('Isotônico / Repositor de Eletrólitos (Devido a hidratação de bioimpedância de apenas ' + latestBody.bodyWater + '%)');
+    }
+    
+    // Filtra logs de treino e corrida dos últimos 7 dias
+    const runsLast7Days = runLogs.filter(r => {
+      const diffTime = new Date().getTime() - new Date(r.date).getTime();
+      return diffTime <= 7 * 24 * 60 * 60 * 1000;
+    });
+    const workoutsLast7Days = workoutLogs.filter(w => {
+      const diffTime = new Date().getTime() - new Date(w.date).getTime();
+      return diffTime <= 7 * 24 * 60 * 60 * 1000;
+    });
+    const totalRunDist = runsLast7Days.reduce((acc, r) => acc + r.distance, 0);
+
+    if (totalRunDist >= 15 || workoutsLast7Days.length >= 4) {
+      items.push('Cápsulas de Magnésio e Potássio (Ajuda na recuperação de espasmos e câimbras de alto volume esportivo)');
+      items.push('Beta-Alanina ou Creatina (Auxilia na regeneração de energia celular pós-atividade física)');
+    }
+    return items;
+  }, [latestBody, runLogs, workoutLogs]);
+
   // Forms do diário
   const [showAddFoodForm, setShowAddFoodForm] = useState(false);
   const [foodForm, setFoodForm] = useState({
@@ -92,6 +202,12 @@ export const Diet: React.FC = () => {
     fat: '',
     mealId: 'breakfast'
   });
+
+  // Câmera / Escaneador de Pratos por Imagem
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanImage, setScanImage] = useState<string | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanMealId, setScanMealId] = useState('breakfast');
 
   const handleSaveFoodItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,6 +259,94 @@ export const Diet: React.FC = () => {
       existingLog.items.splice(index, 1);
       db.saveFoodLog(existingLog);
       refreshDietData();
+    }
+  };
+
+  // Câmera e Análise por IA
+  const SIMULATED_VISION_MEALS = [
+    { name: 'Salmão Grelhado com Purê de Batata Doce e Brócolis', calories: 540, protein: 42, carbs: 45, fat: 18 },
+    { name: 'Frango com Arroz Integral e Mix de Legumes', calories: 480, protein: 38, carbs: 50, fat: 10 },
+    { name: 'Omelete de 3 Ovos com Queijo Branco e Tomate', calories: 350, protein: 26, carbs: 6, fat: 24 },
+    { name: 'Tigela Proteica de Iogurte Grego, Aveia e Morangos', calories: 320, protein: 24, carbs: 35, fat: 5 }
+  ];
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScanImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAnalyzeImage = async () => {
+    if (!scanImage) return;
+    setScanLoading(true);
+
+    try {
+      let detectedMeal = { name: '', calories: 0, protein: 0, carbs: 0, fat: 0 };
+      
+      if (settings.apiKey && settings.apiProvider === 'gemini') {
+        const result = await parseMealImage(scanImage);
+        detectedMeal = {
+          name: result.title,
+          calories: result.calories,
+          protein: result.protein,
+          carbs: result.carbs,
+          fat: result.fat
+        };
+      } else {
+        // Simulação local após 2 segundos
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const randomIdx = Math.floor(Math.random() * SIMULATED_VISION_MEALS.length);
+        detectedMeal = SIMULATED_VISION_MEALS[randomIdx];
+      }
+
+      // Adiciona o alimento detectado ao diário
+      const newItem: FoodLogItem = {
+        name: `[IA] ${detectedMeal.name}`,
+        calories: detectedMeal.calories,
+        protein: detectedMeal.protein,
+        carbs: detectedMeal.carbs,
+        fat: detectedMeal.fat,
+        mealId: scanMealId
+      };
+
+      const logs = db.getFoodLogs();
+      const existingLogIdx = logs.findIndex(log => log.date === todayStr);
+
+      if (existingLogIdx >= 0) {
+        logs[existingLogIdx].items.push(newItem);
+        db.saveFoodLog(logs[existingLogIdx]);
+      } else {
+        const newLog: FoodLog = {
+          id: `food-${Date.now()}`,
+          date: todayStr,
+          items: [newItem]
+        };
+        db.saveFoodLog(newLog);
+      }
+
+      refreshDietData();
+      setShowScanModal(false);
+      setScanImage(null);
+      
+      confetti({
+        particleCount: 50,
+        spread: 35,
+        origin: { y: 0.75 },
+        colors: ['#f97316', '#10b981']
+      });
+
+      alert(`A IA identificou: ${detectedMeal.name} e lançou no seu diário!`);
+
+    } catch (err: any) {
+      console.error(err);
+      alert(`Falha na análise de prato: ${err.message}`);
+    } finally {
+      setScanLoading(false);
     }
   };
 
@@ -934,7 +1138,14 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
           {/* Esquerda: Consumo de hoje */}
           <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'left' }}>
             <div className="flex-between">
-              <h2 style={{ fontSize: '1.25rem', color: '#fff' }}>Resumo de Nutrientes de Hoje</h2>
+              <h2 style={{ fontSize: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                Resumo de Nutrientes de Hoje
+                {settings.carbCyclingMode === 'auto' && (
+                  <span className={`carb-cycling-badge ${carbCyclingDayType}`}>
+                    {carbCyclingDayType === 'high' ? 'Carbo Alto 🔴' : carbCyclingDayType === 'medium' ? 'Carbo Médio 🔵' : 'Carbo Baixo 🟢'}
+                  </span>
+                )}
+              </h2>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}</span>
             </div>
 
@@ -1037,13 +1248,48 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               </div>
             </div>
 
+            {/* Barra de TDEE e Gasto Ativo */}
+            <div className="tdee-bar-wrapper" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', marginTop: '0.25rem' }}>
+              <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <span>Meta Diária de Hidratação (Água):</span>
+                <strong style={{ color: 'var(--accent-blue)' }}>{targetMacros.waterTarget} ml</strong>
+              </div>
+              <div className="flex-between" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                <span>Gasto Energético Ativo Cruzado (TDEE):</span>
+                <strong style={{ color: 'var(--text-primary)' }}>{targetMacros.calories} kcal ({settings.tdeeMode === 'auto' ? 'Adaptativo' : 'Estático'})</strong>
+              </div>
+              <div className="tdee-bar-container">
+                <div className="tdee-bar-base" style={{ width: `${Math.min(100, ((targetMacros.calories - (settings.tdeeMode === 'auto' ? activeCaloriesBurned : 0)) / targetMacros.calories) * 100)}%` }} />
+                {settings.tdeeMode === 'auto' && activeCaloriesBurned > 0 && (
+                  <div className="tdee-bar-active" style={{ width: `${Math.min(100, (activeCaloriesBurned / targetMacros.calories) * 100)}%` }} />
+                )}
+              </div>
+              <div className="tdee-legend">
+                <div className="tdee-legend-item">
+                  <span className="tdee-legend-dot base" />
+                  <span>Meta Base ({targetMacros.calories - (settings.tdeeMode === 'auto' ? activeCaloriesBurned : 0)} kcal)</span>
+                </div>
+                {settings.tdeeMode === 'auto' && activeCaloriesBurned > 0 && (
+                  <div className="tdee-legend-item">
+                    <span className="tdee-legend-dot active" />
+                    <span>Gasto Ativo (+{activeCaloriesBurned} kcal)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Listagem de alimentos do dia */}
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
               <div className="flex-between" style={{ marginBottom: '1rem' }}>
                 <h3 style={{ fontSize: '1rem', color: '#fff' }}>Alimentos Consumidos Hoje</h3>
-                <button className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }} onClick={() => setShowAddFoodForm(true)}>
-                  <Plus size={14} /> Registrar Alimento
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderColor: 'rgba(249,115,22,0.4)', display: 'flex', alignItems: 'center', gap: '0.35rem' }} onClick={() => setShowScanModal(true)}>
+                    <Bot size={14} color="var(--accent-orange)" /> Escanear Prato
+                  </button>
+                  <button className="btn btn-secondary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }} onClick={() => setShowAddFoodForm(true)}>
+                    <Plus size={14} /> Registrar Alimento
+                  </button>
+                </div>
               </div>
 
               {todayLog.items.length === 0 ? (
@@ -1205,6 +1451,84 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                   <button type="button" className="btn btn-secondary" onClick={() => setShowAddFoodForm(false)}>Cancelar</button>
                 </div>
               </form>
+            )}
+
+            {/* Modal/Form Escanear Prato por IA */}
+            {showScanModal && (
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <h4 style={{ fontSize: '0.9rem', color: 'var(--accent-orange)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Bot size={16} /> Escanear Prato / Rótulo com IA
+                </h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Faça o upload de uma foto do seu prato ou tabela nutricional para estimar os macronutrientes.
+                </p>
+
+                <div className="form-group">
+                  <label htmlFor="scanMeal">Lançar na Refeição:</label>
+                  <select
+                    id="scanMeal"
+                    className="form-control"
+                    value={scanMealId}
+                    onChange={(e) => setScanMealId(e.target.value)}
+                  >
+                    <option value="breakfast">Café da Manhã</option>
+                    <option value="lunch">Almoço</option>
+                    <option value="dinner">Jantar</option>
+                    <option value="snack">Lanches</option>
+                  </select>
+                </div>
+
+                <div className="image-scanner-container" onClick={() => document.getElementById('cameraInput')?.click()}>
+                  <input
+                    id="cameraInput"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                  {scanImage ? (
+                    <img src={scanImage} alt="Preview" className="scanner-image-preview" />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '2rem' }}>📸</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Clique para tirar foto ou selecionar imagem</span>
+                    </div>
+                  )}
+                </div>
+
+                {scanLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <div className="scan-progress-bar">
+                      <div className="scan-progress-fill" />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-orange)', textAlign: 'center', fontWeight: 'bold' }}>
+                      {settings.apiKey && settings.apiProvider === 'gemini' 
+                        ? 'Gemini Vision analisando seu prato...' 
+                        : 'Simulando análise de imagem com IA...'}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ flex: 1, background: 'var(--accent-orange)', borderColor: 'var(--accent-orange)' }}
+                    onClick={handleAnalyzeImage}
+                    disabled={!scanImage || scanLoading}
+                  >
+                    Analisar Prato
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => { setShowScanModal(false); setScanImage(null); }}
+                    disabled={scanLoading}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -1741,6 +2065,34 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               )}
             </div>
 
+            {/* Recomendações Saudáveis do Coach IA baseadas em esforço e hidratação */}
+            {autoSupplements.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', marginTop: '1rem' }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'var(--accent-orange)', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                  <Bot size={14} color="var(--accent-orange)" /> Recomendações do Coach IA
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {autoSupplements.map((supp, idx) => (
+                    <div key={idx} style={{ background: 'rgba(249, 115, 22, 0.04)', border: '1px solid rgba(249, 115, 22, 0.15)', borderRadius: '6px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', textAlign: 'left' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#ffb38a', lineHeight: 1.35 }}>{supp}</span>
+                      <button 
+                        type="button"
+                        className="btn btn-secondary" 
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)' }}
+                        onClick={() => {
+                          const cleanName = supp.split(' (')[0];
+                          setShoppingLogs([...shoppingLogs, cleanName]);
+                          alert(`Adicionado à lista: ${cleanName}`);
+                        }}
+                      >
+                        + Adicionar à Lista
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               <span>Destinatário configurado: </span>
               <strong style={{ color: '#fff' }}>{settings.emailForList || 'Nenhum (configure em Ajustes)'}</strong>
@@ -1761,6 +2113,28 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Conselhos alimentares refinados cruzando dados biométricos de bioimpedância e gasto esportivo.</p>
             </div>
           </div>
+
+          {/* Alerta de Platô do Coach se detectado */}
+          {plateauStatus && plateauStatus.detected && (
+            <div className="coach-alert-card">
+              <div className="coach-alert-header">
+                <TrendingUp size={18} color="var(--accent-orange)" />
+                <span>Detector de Platô Fisiológico</span>
+              </div>
+              <p className="coach-alert-desc">
+                {plateauStatus.message} A IA detectou uma estagnação no peso. Recomendamos ajustar as metas calóricas ou realizar um Refeed.
+              </p>
+              <div className="coach-alert-actions">
+                <button 
+                  className="btn btn-primary" 
+                  style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', background: 'var(--accent-orange)', borderColor: 'var(--accent-orange)' }}
+                  onClick={() => handleSendNutriMsg('A IA detectou estagnação de platô de peso no meu histórico nas últimas semanas. Qual protocolo exato devo seguir e como ajusto minhas calorias hoje?')}
+                >
+                  Ver Protocolo IA
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Área do Chat */}
           <div className="nutri-chat-log">

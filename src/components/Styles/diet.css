@@ -650,3 +650,189 @@
   border-color: rgba(249, 115, 22, 0.3);
   color: #fff;
 }
+
+/* Estilos para Escaneador de Pratos / Rótulos */
+.image-scanner-container {
+  border: 2px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.01);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  transition: var(--transition-smooth);
+  cursor: pointer;
+}
+
+.image-scanner-container:hover {
+  border-color: var(--accent-orange);
+  background: rgba(249, 115, 22, 0.02);
+}
+
+.scanner-camera-preview {
+  width: 100%;
+  max-width: 320px;
+  height: 240px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  object-fit: cover;
+  background: #000;
+}
+
+.scanner-image-preview {
+  width: 100%;
+  max-width: 280px;
+  max-height: 200px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+  border: 1px solid var(--border-subtle);
+}
+
+.scan-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.scan-progress-fill {
+  height: 100%;
+  background: var(--accent-orange);
+  animation: scanProgressAnim 2s infinite linear;
+}
+
+@keyframes scanProgressAnim {
+  0% { width: 0%; left: 0%; }
+  50% { width: 100%; left: 0%; }
+  100% { width: 0%; left: 100%; }
+}
+
+/* Badges de Ciclo de Carboidratos */
+.carb-cycling-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.carb-cycling-badge.high {
+  background: rgba(249, 115, 22, 0.15);
+  color: var(--accent-orange);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.carb-cycling-badge.medium {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+
+.carb-cycling-badge.low {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* Barra de Calorias Ativas vs Base */
+.tdee-bar-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.tdee-bar-container {
+  display: flex;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.tdee-bar-base {
+  height: 100%;
+  background: var(--accent-blue);
+}
+
+.tdee-bar-active {
+  height: 100%;
+  background: var(--accent-orange);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tdee-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.tdee-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tdee-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tdee-legend-dot.base {
+  background: var(--accent-blue);
+}
+
+.tdee-legend-dot.active {
+  background: var(--accent-orange);
+}
+
+/* Alertas de Platô / Coach IA */
+.coach-alert-card {
+  background: rgba(249, 115, 22, 0.05);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.coach-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.coach-alert-desc {
+  font-size: 0.825rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.coach-alert-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+

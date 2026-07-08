@@ -196,6 +196,41 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
+        {/* Configurações de Nutrição Avançada */}
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left', marginTop: '1.5rem' }}>
+          <h3 style={{ fontSize: '1.1rem', color: '#fff', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', margin: 0 }}>
+            Nutrição Inteligente & Integração de Treinos
+          </h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group">
+              <label htmlFor="setTdeeMode">Cálculo de Gasto Energético (TDEE)</label>
+              <select
+                id="setTdeeMode"
+                className="form-control"
+                value={settings.tdeeMode || 'auto'}
+                onChange={(e) => setSettings({ ...settings, tdeeMode: e.target.value as 'none' | 'auto' })}
+              >
+                <option value="auto">Adaptativo (Soma Musculação/Corrida do dia)</option>
+                <option value="none">Estático (Apenas Taxa Metabólica Basal)</option>
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="setCarbCyclingMode">Ciclo de Carboidratos (Carb Cycling)</label>
+              <select
+                id="setCarbCyclingMode"
+                className="form-control"
+                value={settings.carbCyclingMode || 'auto'}
+                onChange={(e) => setSettings({ ...settings, carbCyclingMode: e.target.value as 'none' | 'auto' })}
+              >
+                <option value="auto">Automatizado (Ajusta macros pelo treino do dia)</option>
+                <option value="none">Desativado (Macros lineares fixos todos os dias)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Rodapé e Salvar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
           <button type="button" className="btn btn-secondary" style={{ color: '#ff6b6b' }} onClick={handleClearData}>
