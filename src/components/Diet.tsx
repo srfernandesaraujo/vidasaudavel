@@ -1170,52 +1170,34 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
         const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
         const formattedFrom = fromEmail.includes('<') ? fromEmail : `Vida Saudável <${fromEmail}>`;
 
-        let res: Response | null = null;
-        try {
-          // Proxy Primário
-          res = await fetch('https://corsproxy.io/?https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${settings.resendApiKey}`
-            },
-            body: JSON.stringify({
-              from: formattedFrom,
-              to: settings.emailForList,
-              subject: emailSubject,
-              text: emailBody
-            })
-          });
-        } catch (firstProxyErr) {
-          console.warn('Falha no corsproxy.io, tentando proxy secundário (thingproxy):', firstProxyErr);
-          // Proxy Secundário
-          res = await fetch('https://thingproxy.freeboard.io/fetch/https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${settings.resendApiKey}`
-            },
-            body: JSON.stringify({
-              from: formattedFrom,
-              to: settings.emailForList,
-              subject: emailSubject,
-              text: emailBody
-            })
-          });
-        }
+        // Chamamos a nossa Pages Function interna (/api/send-email) que roda no Cloudflare Pages Serverless Worker.
+        // Isso resolve 100% dos erros de CORS e protege a chave de API de terceiros.
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: formattedFrom,
+            to: settings.emailForList,
+            subject: emailSubject,
+            text: emailBody,
+            apiKey: settings.resendApiKey
+          })
+        });
 
-        if (res && res.ok) {
+        if (res.ok) {
           alert('Lista de compras enviada com sucesso para o seu e-mail via Resend API!');
           return;
         } else {
-          const errBody = res ? await res.text() : 'Sem resposta do proxy CORS.';
+          const errBody = await res.text();
           console.warn('Erro ao disparar via Resend:', errBody);
           alert(`Erro na API do Resend: ${errBody}.\n\nPor favor, verifique se a sua chave de API é válida e se o e-mail de origem está configurado e verificado no painel do Resend.`);
           return; // Para a execução aqui, NÃO abre mailto!
         }
       } catch (err: any) {
-        console.error('Falha de rede ao disparar e-mail via Resend:', err);
-        alert(`Erro de conexão ao enviar e-mail via Resend: ${err.message || err}`);
+        console.error('Falha ao disparar e-mail via Pages Function:', err);
+        alert(`Erro de conexão ao enviar e-mail: ${err.message || err}`);
         return; // Para a execução aqui, NÃO abre mailto!
       }
     }
