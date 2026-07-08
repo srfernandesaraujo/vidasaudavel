@@ -21,6 +21,40 @@ import './Styles/workouts.css';
 
 ChartJS.register(...registerables);
 
+class TabErrorBoundary extends React.Component<any, { hasError: boolean; error: Error | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("TabErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: '#ff6b6b', textAlign: 'left', background: 'rgba(255, 0, 0, 0.08)', borderRadius: '12px', border: '1px solid rgba(255, 0, 0, 0.2)', margin: '1rem 0' }}>
+          <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>⚠️ Ocorreu um erro ao renderizar o Mapa Muscular</h3>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            Para nos ajudar a corrigir, por favor tire um print ou copie o erro abaixo:
+          </p>
+          <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '1rem', borderRadius: '8px', overflowX: 'auto', fontSize: '0.75rem', fontFamily: 'monospace', color: '#fca5a5' }}>
+            {this.state.error?.toString()}
+            {"\n\nStack Trace:\n"}
+            {this.state.error?.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 class SafeRadar extends React.Component<any, { hasError: boolean }> {
   constructor(props: any) {
     super(props);
@@ -525,32 +559,34 @@ export const Workouts: React.FC = () => {
       </div>
 
       {activeSubTab === 'musclemap' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Gráfico de Radar de Volume Semanal */}
-          <section className="glass-card" style={{ padding: '2rem' }}>
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
-              <Award size={20} color="var(--accent-blue)" />
-              Volume de Séries por Grupo Muscular
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Distribuição semanal de séries completadas nos últimos 7 dias comparada com a meta científica mínima (10 séries).
-            </p>
-            <div style={{ height: '320px', position: 'relative' }}>
-              <SafeRadar data={muscleVolumeData} options={radarOptions} />
-            </div>
-          </section>
+        <TabErrorBoundary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Gráfico de Radar de Volume Semanal */}
+            <section className="glass-card" style={{ padding: '2rem' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                <Award size={20} color="var(--accent-blue)" />
+                Volume de Séries por Grupo Muscular
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                Distribuição semanal de séries completadas nos últimos 7 dias comparada com a meta científica mínima (10 séries).
+              </p>
+              <div style={{ height: '320px', position: 'relative' }}>
+                <SafeRadar data={muscleVolumeData} options={radarOptions} />
+              </div>
+            </section>
 
-          <section className="glass-card" style={{ padding: '2rem' }}>
-            <h2 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
-              <AlertCircle size={20} color="var(--accent-emerald)" />
-              Frequência de Grupos Musculares Trabalhados
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Os cards abaixo mostram o volume teórico nos treinos cadastrados (azul/roxo) e quantas vezes foram ativados no histórico de execuções (verde).
-            </p>
-            <SafeMuscleMap />
-          </section>
-        </div>
+            <section className="glass-card" style={{ padding: '2rem' }}>
+              <h2 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                <AlertCircle size={20} color="var(--accent-emerald)" />
+                Frequência de Grupos Musculares Trabalhados
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                Os cards abaixo mostram o volume teórico nos treinos cadastrados (azul/roxo) e quantas vezes foram ativados no histórico de execuções (verde).
+              </p>
+              <SafeMuscleMap />
+            </section>
+          </div>
+        </TabErrorBoundary>
       ) : (
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {workouts.length > 0 && (
