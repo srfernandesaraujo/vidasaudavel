@@ -195,13 +195,13 @@ export const MuscleMap: React.FC = () => {
           // Muda vermelho para roxo/azul-elétrico (+245deg) e adiciona brilho médio
           imageFilter = 'hue-rotate(245deg) saturate(1.8) brightness(1.15) drop-shadow(0 0 6px rgba(59, 130, 246, 0.5))';
         } else {
-          // Inativo: deixa a silhueta em escala de cinza e escurece a imagem
-          imageFilter = 'grayscale(1) opacity(0.35) brightness(0.6)';
+          // Inativo: exibe na cor azul original do png, sem escala de cinza, apenas mais suave
+          imageFilter = 'opacity(0.6) brightness(0.85)';
         }
 
         return (
           <div key={muscle.id} className="muscle-card glass-card">
-            <div className="muscle-image-container">
+            <div className="muscle-image-container" style={{ overflow: 'hidden' }}>
               <img 
                 src={muscle.image} 
                 alt={muscle.name} 
@@ -209,6 +209,7 @@ export const MuscleMap: React.FC = () => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
+                  transform: 'scale(1.4) translateY(11px)',
                   filter: imageFilter,
                   transition: 'all 0.4s ease'
                 }}
