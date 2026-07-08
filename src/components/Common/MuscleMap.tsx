@@ -9,6 +9,30 @@ interface MuscleGroup {
   image: string;
 }
 
+export function normalizeMuscleName(name: string): string {
+  if (!name) return '';
+  const normalized = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+    .trim();
+
+  if (normalized === 'peito' || normalized === 'peitoral') return 'Peitoral';
+  if (normalized === 'costas' || normalized === 'dorsal') return 'Dorsal';
+  if (normalized === 'trapezio') return 'Trapézio';
+  if (normalized === 'deltoide' || normalized === 'ombro' || normalized === 'ombros') return 'Deltóide';
+  if (normalized === 'biceps') return 'Bíceps';
+  if (normalized === 'triceps') return 'Tríceps';
+  if (normalized === 'antebraco') return 'Antebraço';
+  if (normalized === 'abdominal' || normalized === 'abdomen' || normalized === 'abs') return 'Abdominal';
+  if (normalized === 'quadriceps' || normalized === 'pernas' || normalized === 'perna') return 'Quadríceps';
+  if (normalized === 'gluteos' || normalized === 'gluteo') return 'Glúteos';
+  if (normalized === 'posteriores' || normalized === 'posterior') return 'Posteriores';
+  if (normalized === 'panturrilha' || normalized === 'panturrilhas') return 'Panturrilha';
+
+  return name; // Fallback
+}
+
 export const MuscleMap: React.FC = () => {
   // Busca dados do banco de forma segura
   const workoutLogs = db.getWorkoutLogs() || [];
@@ -113,8 +137,7 @@ export const MuscleMap: React.FC = () => {
         if (log && Array.isArray(log.exercises)) {
           log.exercises.forEach(ex => {
             if (ex && ex.muscleGroup) {
-              const group = ex.muscleGroup;
-              // Tratamento de acentuação e correspondência robusta
+              const group = normalizeMuscleName(ex.muscleGroup);
               if (counts[group] !== undefined) {
                 counts[group] += 1;
                 if (log.date) {
@@ -148,7 +171,7 @@ export const MuscleMap: React.FC = () => {
     try {
       const safeExercises = Array.isArray(exercises) ? exercises : [];
       muscleGroups.forEach(g => {
-        freqs[g.id] = safeExercises.filter(ex => ex && ex.muscleGroup === g.id).length;
+        freqs[g.id] = safeExercises.filter(ex => ex && normalizeMuscleName(ex.muscleGroup) === g.id).length;
       });
     } catch (err) {
       console.error("Erro ao calcular frequências teóricas:", err);

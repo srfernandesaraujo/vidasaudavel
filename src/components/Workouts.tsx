@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { db, type Exercise, type Workout, type WorkoutLog } from '../utils/db';
-import { MuscleMap } from './Common/MuscleMap';
+import { MuscleMap, normalizeMuscleName } from './Common/MuscleMap';
 import { 
   Plus, 
   Copy, 
@@ -116,8 +116,11 @@ export const Workouts: React.FC = () => {
           const logDateObj = new Date(log.date);
           if (logDateObj && !isNaN(logDateObj.getTime()) && logDateObj >= sevenDaysAgo) {
             log.exercises.forEach(ex => {
-              if (ex && ex.muscleGroup && volume[ex.muscleGroup] !== undefined) {
-                volume[ex.muscleGroup] += Number(ex.series) || 0;
+              if (ex && ex.muscleGroup) {
+                const group = normalizeMuscleName(ex.muscleGroup);
+                if (volume[group] !== undefined) {
+                  volume[group] += Number(ex.series) || 0;
+                }
               }
             });
           }
