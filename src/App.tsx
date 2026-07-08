@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { Workouts } from './components/Workouts';
@@ -11,6 +11,40 @@ import { Auth } from './components/Auth';
 import { auth as firebaseAuth, isFirebaseConfigured } from './utils/firebase';
 import { subscribeToUserFirestore } from './utils/db';
 import { type Unsubscribe } from 'firebase/firestore';
+
+class AppErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("AppErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '3rem', color: '#ff6b6b', textAlign: 'left', background: 'rgba(255, 0, 0, 0.05)', borderRadius: '12px', border: '1px solid rgba(255, 0, 0, 0.15)', margin: '2rem' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', fontWeight: 'bold' }}>⚠️ Falha Crítica no Componente de Treinos</h2>
+          <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+            Ocorreu um erro inesperado ao carregar as informações desta aba. Por favor, compartilhe o erro abaixo com o suporte:
+          </p>
+          <pre style={{ background: '#12141c', padding: '1.5rem', borderRadius: '8px', overflowX: 'auto', fontSize: '0.8rem', fontFamily: 'monospace', color: '#fca5a5', border: '1px solid #1f2232' }}>
+            {this.state.error?.toString()}
+            {"\n\nStack Trace:\n"}
+            {this.state.error?.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -75,7 +109,11 @@ function App() {
       case 'dashboard':
         return <Dashboard setActiveTab={setActiveTab} key={dbVer} />;
       case 'workouts':
-        return <Workouts key={dbVer} />;
+        return (
+          <AppErrorBoundary>
+            <Workouts key={dbVer} />
+          </AppErrorBoundary>
+        );
       case 'runtracker':
         return <RunTracker key={dbVer} />;
       case 'calendar':
