@@ -33,7 +33,7 @@ const DIETARY_CATEGORIES = [
   { id: 'diet', name: 'Diet', img: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=300&q=80' },
   { id: 'sem gluten', name: 'Sem Glúten', img: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=300&q=80' },
   { id: 'sem lactose', name: 'Sem Lactose', img: 'https://images.unsplash.com/photo-1505253716362-afaea1d3d1af?auto=format&fit=crop&w=300&q=80' },
-  { id: 'detox', name: 'Detox', img: 'https://images.unsplash.com/photo-1543573852-1a78a39f8602?auto=format&fit=crop&w=300&q=80' }
+  { id: 'detox', name: 'Detox', img: '/images/detox.png' }
 ];
 
 const MEAL_TYPES = [
