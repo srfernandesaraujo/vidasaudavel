@@ -84,6 +84,12 @@
   color: var(--text-primary);
 }
 
+.sidebar-btn.active-orange {
+  background: rgba(249, 115, 22, 0.08);
+  border-left: 3px solid var(--accent-orange);
+  color: var(--text-primary);
+}
+
 .sidebar-footer {
   margin-top: auto;
   border-top: 1px solid var(--border-subtle);
@@ -178,5 +184,14 @@
   .sidebar-btn.active-green svg {
     color: var(--accent-emerald);
     filter: drop-shadow(0 0 6px var(--accent-emerald));
+  }
+
+  .sidebar-btn.active-orange {
+    border-top: 3px solid var(--accent-orange);
+    color: #fff;
+  }
+  .sidebar-btn.active-orange svg {
+    color: var(--accent-orange);
+    filter: drop-shadow(0 0 6px var(--accent-orange));
   }
 }

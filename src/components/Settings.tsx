@@ -160,6 +160,42 @@ export const Settings: React.FC = () => {
           )}
         </div>
 
+        {/* Configurações de Envio da Lista de Compras */}
+        <div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '1.5rem' }}>
+            <Key size={16} color="var(--accent-orange)" />
+            Envio Automático de Lista de Compras
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+            Configure seu e-mail de destino e a chave da API do Resend para habilitar o envio automático da lista de compras gerada a partir do seu cardápio de refeições semanal (toda sexta-feira às 18:00h).
+          </p>
+
+          <div className="grid-cols-2">
+            <div className="form-group">
+              <label htmlFor="setEmailForList">E-mail de Destino</label>
+              <input
+                id="setEmailForList"
+                type="email"
+                className="form-control"
+                placeholder="exemplo@email.com"
+                value={settings.emailForList || ''}
+                onChange={(e) => setSettings({ ...settings, emailForList: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="setResendApiKey">Chave de API do Resend (re_...)</label>
+              <input
+                id="setResendApiKey"
+                type="password"
+                className="form-control"
+                placeholder="Opcional para envio automático nativo"
+                value={settings.resendApiKey || ''}
+                onChange={(e) => setSettings({ ...settings, resendApiKey: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Rodapé e Salvar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
           <button type="button" className="btn btn-secondary" style={{ color: '#ff6b6b' }} onClick={handleClearData}>

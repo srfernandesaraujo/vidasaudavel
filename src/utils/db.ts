@@ -90,6 +90,67 @@ export interface UserSettings {
   restingHeartRate: number;
   apiKey: string;
   apiProvider: 'gemini' | 'openai' | 'none';
+  emailForList?: string;
+  resendApiKey?: string;
+}
+
+export interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  rating: number;
+  prepTime: number;
+  cookTime: number;
+  totalTime: number;
+  servings: number;
+  lastMade?: string;
+  image?: string;
+  ingredients: string[];
+  instructions: string[];
+  tags: string[];
+  sourceUrl?: string;
+  comments?: {
+    id: string;
+    user: string;
+    text: string;
+    date: string;
+  }[];
+}
+
+export interface MealPlanItem {
+  recipeId?: string;
+  customName?: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+}
+
+export interface Meal {
+  id: string;
+  name: string;
+  items: MealPlanItem[];
+}
+
+export interface MealPlan {
+  id: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD
+  meals: Meal[];
+}
+
+export interface FoodLogItem {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  mealId?: string;
+}
+
+export interface FoodLog {
+  id: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD
+  items: FoodLogItem[];
 }
 
 const KEYS = {
@@ -100,6 +161,10 @@ const KEYS = {
   BODY_COMP: 'vs_body_comp',
   RACES: 'vs_races',
   SETTINGS: 'vs_settings',
+  RECIPES: 'vs_recipes',
+  MEAL_PLANS: 'vs_meal_plans',
+  FOOD_LOGS: 'vs_food_logs',
+  LAST_EMAIL_SENT_WEEK: 'vs_last_email_sent_week',
 };
 
 // Sementes iniciais
@@ -132,7 +197,68 @@ const INITIAL_SETTINGS: UserSettings = {
   restingHeartRate: 60,
   apiKey: '',
   apiProvider: 'none',
+  emailForList: '',
+  resendApiKey: '',
 };
+
+const INITIAL_RECIPES: Recipe[] = [
+  {
+    id: 'rec-1',
+    title: 'Ovos Benedict dos Campeões',
+    description: 'Gosta de gema mole? Se sim, essa receita é perfeita para você! Comece o dia com um café da manhã delicioso e nutritivo.',
+    rating: 5,
+    prepTime: 15,
+    cookTime: 15,
+    totalTime: 15,
+    servings: 1,
+    lastMade: 'Nunca',
+    image: 'https://images.unsplash.com/photo-1608039829572-78524f79c4c7?auto=format&fit=crop&w=800&q=80',
+    ingredients: [
+      '4 ovos',
+      '2 fatias de pão inglês ou muffin inglês, cortadas ao meio',
+      '4 fatias de presunto (ou bacon canadense)',
+      '1 colher de sopa de vinagre branco'
+    ],
+    instructions: [
+      'Em uma panela grande, coloque água suficiente para cobrir os ovos e adicione o vinagre. Aqueça até começar a ferver.',
+      'Quebre um ovo em um recipiente pequeno, criando um pequeno redemoinho na água com uma colher. Deslize o ovo na água, cuidando para não se misturar com outros ovos. Cozinhe por cerca de 3 a 4 minutos para a gema ficar mole. Retire com uma escumadeira e repita com os outros ovos.',
+      'Toste as fatias de pão ou muffin inglês em uma torradeira ou frigideira até ficarem crocantes.',
+      'Em uma frigideira, doure as fatias de presunto (ou bacon canadense) até ficarem ligeiramente crocantes.',
+      'Montagem: Coloque uma fatia de pão ou muffin inglês em cada prato. Coloque uma fatia de presunto sobre o pão. Com cuidado, coloque um ovo pochê sobre o presunto.'
+    ],
+    tags: ['Fit', 'Café da Manhã'],
+    comments: [
+      { id: 'c-1', user: 'Atleta Saudável', text: 'Receita incrível! A gema mole no ponto certo faz toda a diferença.', date: '2026-07-08' }
+    ]
+  },
+  {
+    id: 'rec-2',
+    title: 'Omelete de Claras com Legumes',
+    description: 'Opção de jantar leve e nutritivo que ajuda na saciedade e emagrecimento rápido! Rico em proteínas.',
+    rating: 4,
+    prepTime: 5,
+    cookTime: 5,
+    totalTime: 10,
+    servings: 1,
+    lastMade: 'Nunca',
+    image: 'https://images.unsplash.com/photo-1510629954389-c1e0da47d414?auto=format&fit=crop&w=800&q=80',
+    ingredients: [
+      '3 claras de ovo',
+      '1/2 tomate picado',
+      '1/4 xícara de espinafre fresco',
+      '1 colher de sopa de cebola picada',
+      'Sal e pimenta a gosto'
+    ],
+    instructions: [
+      'Bata as claras em um prato com uma pitada de sal.',
+      'Aqueça uma frigideira antiaderente untada com um fio de azeite.',
+      'Adicione a cebola, o tomate e o espinafre e refogue por 2 minutos.',
+      'Despeje as claras batidas sobre os legumes, tampe a frigideira e cozinhe em fogo baixo até dourar e firmar dos dois lados.'
+    ],
+    tags: ['Low Carb', 'Jantar', 'Proteico'],
+    comments: []
+  }
+];
 
 // Leitores locais síncronos
 function getFromStorage<T>(key: string, defaultValue: T): T {
@@ -192,6 +318,9 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
     { subpath: 'run_logs', key: KEYS.RUN_LOGS, defaultVal: [] },
     { subpath: 'body_comp_logs', key: KEYS.BODY_COMP, defaultVal: [] },
     { subpath: 'races', key: KEYS.RACES, defaultVal: [] },
+    { subpath: 'recipes', key: KEYS.RECIPES, defaultVal: INITIAL_RECIPES },
+    { subpath: 'meal_plans', key: KEYS.MEAL_PLANS, defaultVal: [] },
+    { subpath: 'food_logs', key: KEYS.FOOD_LOGS, defaultVal: [] },
   ];
 
   collectionsToSync.forEach(({ subpath, key, defaultVal }) => {
@@ -201,10 +330,10 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
       snapshot.forEach((doc) => {
         data.push(doc.data());
       });
-      // Se Firestore estiver vazio para treinos/exercícios, não sobrescreve com array vazio na primeira carga
+      // Se Firestore estiver vazio para treinos/exercícios/receitas, não sobrescreve com array vazio na primeira carga
       if (data.length > 0) {
         saveToStorage(key, data);
-      } else if (snapshot.metadata.fromCache === false && (key === KEYS.WORKOUTS || key === KEYS.EXERCISES)) {
+      } else if (snapshot.metadata.fromCache === false && (key === KEYS.WORKOUTS || key === KEYS.EXERCISES || key === KEYS.RECIPES)) {
         // Se explicitamente vazio no servidor e não for cache
         saveToStorage(key, defaultVal);
       } else if (snapshot.metadata.fromCache === false) {
@@ -390,5 +519,62 @@ export const db = {
     const races = db.getRaces().filter(r => r.id !== id);
     saveToStorage(KEYS.RACES, races);
     removeFromFirestore('races', id);
+  },
+
+  // Receitas
+  getRecipes: (): Recipe[] => getFromStorage(KEYS.RECIPES, INITIAL_RECIPES),
+  saveRecipe: (recipe: Recipe): void => {
+    const recipes = db.getRecipes();
+    const index = recipes.findIndex(r => r.id === recipe.id);
+    if (index >= 0) {
+      recipes[index] = recipe;
+    } else {
+      recipes.push(recipe);
+    }
+    saveToStorage(KEYS.RECIPES, recipes);
+    writeToFirestore('recipes', recipe.id, recipe);
+  },
+  deleteRecipe: (id: string): void => {
+    const recipes = db.getRecipes().filter(r => r.id !== id);
+    saveToStorage(KEYS.RECIPES, recipes);
+    removeFromFirestore('recipes', id);
+  },
+
+  // Planejador de Refeições
+  getMealPlans: (): MealPlan[] => getFromStorage(KEYS.MEAL_PLANS, []),
+  saveMealPlan: (plan: MealPlan): void => {
+    const plans = db.getMealPlans();
+    const index = plans.findIndex(p => p.id === plan.id);
+    if (index >= 0) {
+      plans[index] = plan;
+    } else {
+      plans.push(plan);
+    }
+    saveToStorage(KEYS.MEAL_PLANS, plans);
+    writeToFirestore('meal_plans', plan.id, plan);
+  },
+  deleteMealPlan: (id: string): void => {
+    const plans = db.getMealPlans().filter(p => p.id !== id);
+    saveToStorage(KEYS.MEAL_PLANS, plans);
+    removeFromFirestore('meal_plans', id);
+  },
+
+  // Diário de Alimentos Consumidos
+  getFoodLogs: (): FoodLog[] => getFromStorage(KEYS.FOOD_LOGS, []),
+  saveFoodLog: (log: FoodLog): void => {
+    const logs = db.getFoodLogs();
+    const index = logs.findIndex(l => l.id === log.id);
+    if (index >= 0) {
+      logs[index] = log;
+    } else {
+      logs.push(log);
+    }
+    saveToStorage(KEYS.FOOD_LOGS, logs);
+    writeToFirestore('food_logs', log.id, log);
+  },
+  deleteFoodLog: (id: string): void => {
+    const logs = db.getFoodLogs().filter(l => l.id !== id);
+    saveToStorage(KEYS.FOOD_LOGS, logs);
+    removeFromFirestore('food_logs', id);
   }
 };

@@ -393,3 +393,181 @@ export function generateHealthAnalysis(): AnalysisReport {
     labExams: Array.from(new Set(labExams)) // Remove duplicados
   };
 }
+
+// -------------------------------------------------------------
+// NUTRICIONISTA IA - SISTEMA E PROMPTS
+// -------------------------------------------------------------
+
+function generateNutritionSystemPrompt(contextData: {
+  bodyCompLogs: BodyCompLog[];
+  runLogs: RunLog[];
+  workoutLogs: WorkoutLog[];
+  mealPlans: any[];
+}) {
+  const { bodyCompLogs, runLogs, workoutLogs, mealPlans } = contextData;
+  const settings = db.getSettings();
+
+  const latestBody = bodyCompLogs[bodyCompLogs.length - 1];
+  const formattedBody = latestBody 
+    ? `Peso: ${latestBody.weight}kg (Meta: ${latestBody.idealWeight}kg), Gordura: ${latestBody.bodyFat}% (Meta: ${latestBody.bodyFatGoal}%), Massa Muscular: ${latestBody.muscleMass}kg (Meta: ${latestBody.muscleMassGoal}%), Água: ${latestBody.bodyWater}%, TMB (Taxa Metabólica Basal): ${latestBody.basalMetabolism} kcal, Gordura Visceral: ${latestBody.visceralFat} (Meta: ${latestBody.visceralFatGoal}), Idade Metabólica: ${latestBody.metabolicAge} anos.`
+    : 'Nenhum registro de composição corporal (bioimpedância) cadastrado.';
+
+  // Gasto recente
+  const workoutCount = workoutLogs.slice(0, 7).length;
+  const runCount = runLogs.slice(0, 7).length;
+  const runDistance = runLogs.slice(0, 7).reduce((acc, r) => acc + r.distance, 0);
+
+  // Planejamento de refeições da semana atual
+  const formattedPlans = mealPlans.slice(0, 7).map(p => {
+    const mealsStr = p.meals.map((m: any) => {
+      const itemsStr = m.items.map((i: any) => i.recipeId ? `Receita id ${i.recipeId}` : i.customName).join(', ');
+      return `- ${m.name}: ${itemsStr || 'Nenhum planejado'}`;
+    }).join('\n  ');
+    return `Data: ${p.date}\n  ${mealsStr}`;
+  }).join('\n');
+
+  return `Você é a Nutricionista Especialista de IA e Consultora Alimentar do sistema "Vida Saudável". Seu papel é orientar o usuário em sua alimentação, planejamento de refeições (cardápio semanal), suplementação e hábitos saudáveis, focando no cruzamento com a composição corporal (bioimpedância) e atividade física (musculação e corrida).
+
+Aqui estão os dados de saúde e treino atuais do usuário:
+Nome: ${settings.userName}
+Altura: ${settings.height} cm
+Idade: ${settings.age} anos
+
+ÚLTIMA COMPOSIÇÃO CORPORAL (BIOIMPEDÂNCIA):
+${formattedBody}
+
+ATIVIDADE FÍSICA NOS ÚLTIMOS 7 DIAS:
+- Musculação: ${workoutCount} treinos concluídos.
+- Corrida de Rua: ${runCount} sessões concluídas (Volume total: ${runDistance.toFixed(1)} km).
+
+CARDÁPIO SEMANAL PLANEJADO:
+${formattedPlans || 'Nenhum planejamento registrado para esta semana.'}
+
+Diretrizes de resposta:
+1. Seja acolhedora, científica, prática e altamente personalizada nos cálculos de macronutrientes.
+2. Sempre relacione a ingestão calórica e de proteínas com o peso corporal, massa muscular e o volume de corrida/musculação registrado. Se o usuário estiver treinando pesado, garanta que ele receba proteínas suficientes (ex: ~2.0g/kg) e carboidratos adequados para performance.
+3. Se houver baixa hidratação (<55% de água) ou gordura visceral alta na bioimpedância, sugira estratégias alimentares específicas (chás, alimentos antioxidantes, aumento de fibras, controle de sódio/ultraprocessados).
+4. Forneça receitas fáceis ou substituições quando solicitado.
+5. Responda em português brasileiro (pt-BR).`;
+}
+
+function generateLocalNutritionResponse(userMessage: string): string {
+  const query = userMessage.toLowerCase();
+  const settings = db.getSettings();
+  const bodyCompLogs = db.getBodyCompLogs();
+  const latestBody = bodyCompLogs[bodyCompLogs.length - 1];
+
+  if (query.includes('olá') || query.includes('oi') || query.includes('bom dia') || query.includes('boa tarde')) {
+    return `Olá, **${settings.userName}**! Sou a sua Nutricionista de IA. 
+
+Como posso te ajudar hoje? Posso:
+- Avaliar seu planejamento de refeições semanal.
+- Cruzar seus dados de bioimpedância para calcular suas metas de macronutrientes.
+- Dar receitas saudáveis e dicas de substituição de alimentos.
+- Ajudar a otimizar sua suplementação para ganho de massa ou queima de gordura.`;
+  }
+
+  if (query.includes('proteina') || query.includes('macro') || query.includes('caloria') || query.includes('carboidrato') || query.includes('gordura')) {
+    if (!latestBody) {
+      return `Para calcular seus macronutrientes ideais, eu preciso de um registro de peso ou bioimpedância na aba "Corrida & Corpo". 
+      
+Como diretriz geral para praticantes de atividade física:
+- **Proteínas:** 1.6g a 2.2g por kg de peso corporal (reconstrução muscular).
+- **Gorduras:** 0.8g a 1.0g por kg (equilíbrio hormonal).
+- **Carboidratos:** Ajustar conforme o gasto diário (combustível principal).`;
+    }
+
+    const weight = latestBody.weight;
+    const protein = Math.round(weight * 2.0);
+    const fat = Math.round(weight * 0.8);
+    const bmr = latestBody.basalMetabolism || 1600;
+    const calories = Math.round(bmr * 1.3); // estimativa de TDEE ativo leve
+
+    return `🍎 **Cálculo de Macronutrientes Personalizado**
+Com base na sua bioimpedância recente e perfil ativo:
+
+- **Calorias Diárias:** ~**${calories} kcal** (Meta para manutenção/ganho de massa magra leve).
+- **Proteínas:** **${protein}g** (calculado com 2.0g/kg de peso).
+- **Gorduras:** **${fat}g** (calculado com 0.8g/kg de peso).
+- **Carboidratos:** ~**${Math.round((calories - (protein * 4) - (fat * 9)) / 4)}g** (restante em energia limpa).
+
+*Dica:* Tente bater a meta proteica dividindo-a em 4 refeições de ~30-40g de proteína cada (ex: ovos no café, frango/carne no almoço, whey no lanche e peixe no jantar).`;
+  }
+
+  if (query.includes('suplement') || query.includes('creatina' ) || query.includes('whey') || query.includes('pre treino') || query.includes('termogenico')) {
+    return `💊 **Guia Prático de Suplementação Esportiva**
+
+Para potencializar seus treinos de musculação e corrida, os suplementos com maior comprovação científica são:
+1. **Creatina (3g a 5g diárias):** Melhora a força e ressíntese de ATP na musculação. Deve ser tomada todos os dias, inclusive nos dias de descanso.
+2. **Whey Protein:** Excelente fonte de proteína de rápida absorção para te ajudar a atingir a meta diária (1.6g a 2.0g/kg).
+3. **Cafeína (100mg a 200mg pré-treino):** Aumenta o foco na musculação e reduz a percepção de esforço em corridas longas. Use com moderação para não afetar o sono.
+4. **Beta-Alanina:** Excelente para atividades de alta intensidade que geram queimação muscular (tamponamento de ácido lático).`;
+  }
+
+  if (query.includes('receita') || query.includes('ovo') || query.includes('almoço') || query.includes('jantar') || query.includes('cafe')) {
+    return `🍳 **Sugestão de Refeição Saudável**
+
+Aqui está uma receita rápida e proteica para complementar sua dieta:
+**Crepioca Fit de Frango (Lanche/Jantar)**
+- **Ingredientes:** 2 ovos inteiros, 2 colheres de sopa de goma de tapioca, 60g de frango desfiado temperado, temperos a gosto (sal, pimenta, orégano).
+- **Preparo:** Bata os ovos com a tapioca. Despeje em frigideira quente untada. Quando firmar, adicione o frango no recheio, dobre ao meio e doure ambos os lados.
+- **Macros estimados:** Calorias: 280 kcal | Proteína: 25g | Carbo: 12g | Gordura: 14g.`;
+  }
+
+  if (query.includes('agua') || query.includes('hidrat') || query.includes('caibra') || query.includes('liquido')) {
+    if (latestBody && latestBody.bodyWater < 55) {
+      return `💧 **Alerta de Hidratação:** Na sua última bioimpedância, sua água corporal estava em **${latestBody.bodyWater}%** (o ideal é acima de 55%). Isso prejudica o transporte de nutrientes, a hipertrofia e pode gerar cãibras nos treinos de corrida.
+      
+**Plano de Ação:**
+1. Aumente seu consumo para pelo menos **35ml por kg** de peso, o que equivale a aproximadamente **${Math.round(latestBody.weight * 0.035 * 10) / 10} Litros** de água por dia.
+2. Consuma mais vegetais ricos em água (como pepino, abobrinha, alface e melancia).
+3. Monitore a coloração da urina: ela deve estar sempre amarelo-clara (cor de palha).`;
+    }
+    return `💧 **Importância da Hidratação na Performance**
+Para atletas ativos, a hidratação correta é a chave:
+- Beba pelo menos **35ml a 45ml por kg** de peso diariamente.
+- Evite desidratação severa (perda de >2% do peso corporal em suor), pois ela reduz a força e a capacidade aeróbica na corrida em até 20%.
+- Em corridas longas acima de 1 hora, reponha eletrólitos (sódio, potássio) junto com água.`;
+  }
+
+  return `Entendi o seu ponto nutricional! Para te dar uma resposta focada, você pode me perguntar sobre:
+- **Metas de Macros:** Como calcular suas calorias e proteínas ideais.
+- **Suplementação:** O que tomar para melhorar força ou queima de gordura.
+- **Dicas de Receitas:** Ideias saudáveis de café da manhã, almoço ou jantar.
+- **Análise de Bioimpedância:** Como ajustar a alimentação com base na gordura visceral e água.
+
+Qual desses pontos você quer detalhar hoje?`;
+}
+
+export async function askAINutritionist(userMessage: string, history: ChatMessage[]): Promise<string> {
+  const settings = db.getSettings();
+  const bodyCompLogs = db.getBodyCompLogs();
+  const runLogs = db.getRunLogs();
+  const workoutLogs = db.getWorkoutLogs();
+  const mealPlans = db.getMealPlans();
+
+  const systemPrompt = generateNutritionSystemPrompt({ bodyCompLogs, runLogs, workoutLogs, mealPlans });
+
+  // Se houver chave de API e provedor válido configurado, chama a API correspondente
+  if (settings.apiKey && settings.apiProvider !== 'none') {
+    try {
+      if (settings.apiProvider === 'gemini') {
+        const enrichedPrompt = `INSTRUÇÕES DO SISTEMA E CONTEXTO DE NUTRIÇÃO:\n${systemPrompt}\n\nPergunta do Usuário: ${userMessage}`;
+        return await callGeminiAPI(settings.apiKey, enrichedPrompt, history);
+      } else if (settings.apiProvider === 'openai') {
+        return await callOpenAIAPI(settings.apiKey, userMessage, history, systemPrompt);
+      }
+    } catch (error: any) {
+      console.error('Erro na chamada da API real de Nutrição:', error);
+      return `⚠️ **Erro ao conectar à API da IA (${settings.apiProvider}):** ${error.message}\n\n*Exibindo resposta simulada local como alternativa:*\n\n${generateLocalNutritionResponse(userMessage)}`;
+    }
+  }
+
+  // Fallback para simulador local caso não haja chave cadastrada
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(generateLocalNutritionResponse(userMessage));
+    }, 800); // delay leve para simular processamento
+  });
+}
+

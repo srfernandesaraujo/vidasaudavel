@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { Workouts } from './components/Workouts';
 import { RunTracker } from './components/RunTracker';
+import { Diet } from './components/Diet';
 import { CalendarView } from './components/CalendarView';
 import { AICoach } from './components/AICoach';
 import { AIAnalyzer } from './components/AIAnalyzer';
@@ -116,6 +117,8 @@ function App() {
         );
       case 'runtracker':
         return <RunTracker key={dbVer} />;
+      case 'diet':
+        return <Diet key={dbVer} />;
       case 'calendar':
         return <CalendarView key={dbVer} />;
       case 'aicoach':
