@@ -201,7 +201,7 @@ export const MuscleMap: React.FC = () => {
 
         return (
           <div key={muscle.id} className="muscle-card glass-card">
-            <div className="muscle-image-container" style={{ overflow: 'hidden' }}>
+            <div className="muscle-image-container" style={{ overflow: 'hidden', position: 'relative' }}>
               <img 
                 src={muscle.image} 
                 alt={muscle.name} 
@@ -209,7 +209,8 @@ export const MuscleMap: React.FC = () => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
-                  transform: 'scale(1.4) translateY(11px)',
+                  clipPath: 'inset(18% 0px 0px 0px)', // Recorta os 18% do topo onde fica o texto da imagem original
+                  transform: 'scale(1.25) translateY(10px)', // Dá zoom e recentraliza o músculo sem o texto
                   filter: imageFilter,
                   transition: 'all 0.4s ease'
                 }}
