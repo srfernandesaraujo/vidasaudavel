@@ -14,12 +14,8 @@ import {
   Activity,
   Award
 } from 'lucide-react';
-import { Chart as ChartJS, registerables, type ChartOptions } from 'chart.js';
-import { Radar } from 'react-chartjs-2';
 import confetti from 'canvas-confetti';
 import './Styles/workouts.css';
-
-ChartJS.register(...registerables);
 
 class TabErrorBoundary extends React.Component<any, { hasError: boolean; error: Error | null }> {
   constructor(props: any) {
@@ -52,32 +48,6 @@ class TabErrorBoundary extends React.Component<any, { hasError: boolean; error: 
       );
     }
     return this.props.children;
-  }
-}
-
-class SafeRadar extends React.Component<any, { hasError: boolean }> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: any, errorInfo: any) {
-    console.error("SafeRadar caught an error:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
-          Não foi possível exibir o gráfico de volume nesta sessão.
-        </div>
-      );
-    }
-    return <Radar data={this.props.data || { labels: [], datasets: [] }} options={this.props.options} {...this.props} />;
   }
 }
 
@@ -125,8 +95,8 @@ export const Workouts: React.FC = () => {
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [logWeights, setLogWeights] = useState<Record<string, number>>({});
 
-  // Cálculo de volume semanal (séries executadas nos últimos 7 dias) para o Radar Chart
-  const muscleVolumeData = useMemo(() => {
+  // Cálculo de volume semanal (séries executadas nos últimos 7 dias) por grupo muscular
+  const muscleVolumeList = useMemo(() => {
     const muscles = [
       'Peitoral', 'Dorsal', 'Trapézio', 'Deltóide', 'Bíceps', 'Tríceps',
       'Antebraço', 'Abdominal', 'Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilha'
@@ -154,61 +124,16 @@ export const Workouts: React.FC = () => {
         }
       });
     } catch (err) {
-      console.error("Erro no cálculo do volume muscular para o Radar:", err);
+      console.error("Erro no cálculo do volume muscular:", err);
     }
 
-    return {
-      labels: muscles,
-      datasets: [
-        {
-          label: 'Séries Executadas (Últimos 7 dias)',
-          data: muscles.map(m => volume[m]),
-          backgroundColor: 'rgba(37, 99, 235, 0.15)',
-          borderColor: '#2563eb',
-          borderWidth: 2,
-          pointBackgroundColor: '#2563eb',
-          pointRadius: 3
-        },
-        {
-          label: 'Meta Científica Mínima (Hipertrofia)',
-          data: muscles.map(() => 10),
-          backgroundColor: 'rgba(16, 185, 129, 0.02)',
-          borderColor: 'rgba(16, 185, 129, 0.35)',
-          borderWidth: 1.2,
-          borderDash: [5, 5],
-          pointRadius: 0
-        }
-      ]
-    };
+    return muscles.map(m => ({
+      name: m,
+      count: volume[m],
+      target: 10,
+      pct: Math.min(100, Math.round((volume[m] / 10) * 100))
+    }));
   }, [logs]);
-
-  const radarOptions: ChartOptions<'radar'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: { color: '#9ba1b0', font: { family: 'Inter', size: 10 } }
-      },
-      tooltip: {
-        backgroundColor: '#141620',
-        titleColor: '#ffffff',
-        bodyColor: '#e2e8f0',
-        borderColor: '#1f2232',
-        borderWidth: 1
-      }
-    },
-    scales: {
-      r: {
-        angleLines: { color: 'rgba(255, 255, 255, 0.02)' },
-        grid: { color: 'rgba(255, 255, 255, 0.02)' },
-        pointLabels: { color: '#9ba1b0', font: { family: 'Inter', size: 9, weight: 600 } },
-        ticks: { display: false },
-        min: 0,
-        suggestedMax: 15
-      }
-    }
-  };
 
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [exerciseForm, setExerciseForm] = useState({
@@ -561,17 +486,54 @@ export const Workouts: React.FC = () => {
       {activeSubTab === 'musclemap' ? (
         <TabErrorBoundary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Gráfico de Radar de Volume Semanal */}
+            {/* Grade de Progresso de Volume Semanal */}
             <section className="glass-card" style={{ padding: '2rem' }}>
               <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
                 <Award size={20} color="var(--accent-blue)" />
-                Volume de Séries por Grupo Muscular
+                Volume de Séries por Grupo Muscular (Últimos 7 dias)
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                Distribuição semanal de séries completadas nos últimos 7 dias comparada com a meta científica mínima (10 séries).
+                Meta científica recomendada: mínimo de **10 séries semanais** por grupo muscular para estímulo hipertrófico ideal.
               </p>
-              <div style={{ height: '320px', position: 'relative' }}>
-                <SafeRadar data={muscleVolumeData} options={radarOptions} />
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                {muscleVolumeList.map((m) => {
+                  const isTargetMet = m.count >= m.target;
+                  return (
+                    <div key={m.name} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{m.name}</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isTargetMet ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
+                          {m.count} / {m.target} séries
+                        </span>
+                      </div>
+                      
+                      <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ 
+                          height: '100%', 
+                          width: `${m.pct}%`, 
+                          background: isTargetMet 
+                            ? 'linear-gradient(90deg, #10b981, #059669)' 
+                            : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                          boxShadow: isTargetMet 
+                            ? '0 0 8px rgba(16, 185, 129, 0.6)' 
+                            : '0 0 8px rgba(59, 130, 246, 0.4)',
+                          borderRadius: '99px',
+                          transition: 'width 0.6s ease'
+                        }} />
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        <span>{m.pct}% da meta</span>
+                        {isTargetMet ? (
+                          <span style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>Atingida! 🔥</span>
+                        ) : (
+                          <span>Faltam {Math.max(0, m.target - m.count)}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
