@@ -6,4 +6,13 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), cloudflare()],
+  server: {
+    proxy: {
+      '/api/send-email': {
+        target: 'https://api.resend.com/emails',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/send-email/, ''),
+      }
+    }
+  }
 })

@@ -1170,19 +1170,19 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
         const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
         const formattedFrom = fromEmail.includes('<') ? fromEmail : `Vida Saudável <${fromEmail}>`;
 
-        // Chamamos a nossa Pages Function interna (/api/send-email) que roda no Cloudflare Pages Serverless Worker.
-        // Isso resolve 100% dos erros de CORS e protege a chave de API de terceiros.
+        // Chamamos a nossa Pages Function/Worker de API interna (/api/send-email).
+        // Por ser uma chamada de mesma origem (same-origin), o navegador permite cabeçalhos customizados sem preflight CORS.
         const res = await fetch('/api/send-email', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.resendApiKey}`
           },
           body: JSON.stringify({
             from: formattedFrom,
             to: settings.emailForList,
             subject: emailSubject,
-            text: emailBody,
-            apiKey: settings.resendApiKey
+            text: emailBody
           })
         });
 
