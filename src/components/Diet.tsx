@@ -1167,14 +1167,18 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
     // 1. Tenta enviar via Resend API se a chave estiver configurada
     if (settings.resendApiKey) {
       try {
-        const res = await fetch('https://api.resend.com/emails', {
+        const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
+        const formattedFrom = fromEmail.includes('<') ? fromEmail : `Vida Saudável <${fromEmail}>`;
+
+        // Usamos o corsproxy.io para contornar o bloqueio de CORS do navegador ao acessar a API do Resend diretamente
+        const res = await fetch('https://corsproxy.io/?https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${settings.resendApiKey}`
           },
           body: JSON.stringify({
-            from: 'Vida Saudável <compras@vidasaudavel.app>',
+            from: formattedFrom,
             to: settings.emailForList,
             subject: emailSubject,
             text: emailBody
@@ -1185,10 +1189,12 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
           alert('Lista de compras enviada com sucesso para o seu e-mail via Resend API!');
           return;
         } else {
-          console.warn('Erro ao disparar via Resend, usando fallback mailto.');
+          const errBody = await res.text();
+          console.warn('Erro ao disparar via Resend:', errBody);
+          alert(`Erro na API do Resend: ${errBody}. Usando fallback...`);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Falha de rede ao disparar e-mail via Resend:', err);
       }
     }
 

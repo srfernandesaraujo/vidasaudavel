@@ -167,12 +167,12 @@ export const Settings: React.FC = () => {
             Envio Automático de Lista de Compras
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-            Configure seu e-mail de destino e a chave da API do Resend para habilitar o envio automático da lista de compras gerada a partir do seu cardápio de refeições semanal (toda sexta-feira às 18:00h).
+            Configure seu e-mail de destino, remetente verificado e a chave da API do Resend para habilitar o envio automático da lista de compras gerada a partir do seu cardápio de refeições semanal (toda sexta-feira às 18:00h).
           </p>
 
           <div className="grid-cols-2">
             <div className="form-group">
-              <label htmlFor="setEmailForList">E-mail de Destino</label>
+              <label htmlFor="setEmailForList">E-mail de Destino (Para quem enviar)</label>
               <input
                 id="setEmailForList"
                 type="email"
@@ -183,26 +183,39 @@ export const Settings: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label htmlFor="setResendApiKey">Chave de API do Resend (re_...)</label>
+              <label htmlFor="setResendFromEmail">E-mail de Origem (Remetente do Resend)</label>
               <input
-                id="setResendApiKey"
-                type="password"
+                id="setResendFromEmail"
+                type="email"
                 className="form-control"
-                placeholder="Opcional para envio automático nativo"
-                value={settings.resendApiKey || ''}
-                onChange={(e) => setSettings({ ...settings, resendApiKey: e.target.value })}
+                placeholder="ex: compras@seudominio.com ou onboarding@resend.dev"
+                value={settings.resendFromEmail || ''}
+                onChange={(e) => setSettings({ ...settings, resendFromEmail: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label htmlFor="setResendApiKey">Chave de API do Resend (re_...)</label>
+            <input
+              id="setResendApiKey"
+              type="password"
+              className="form-control"
+              placeholder="Chave secreta para envio automático"
+              value={settings.resendApiKey || ''}
+              onChange={(e) => setSettings({ ...settings, resendApiKey: e.target.value })}
+            />
           </div>
         </div>
 
         {/* Configurações de Nutrição Avançada */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left', marginTop: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.1rem', color: '#fff', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', margin: 0 }}>
+        <div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '1.5rem' }}>
+            <Sparkles size={16} color="var(--accent-emerald)" />
             Nutrição Inteligente & Integração de Treinos
           </h3>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid-cols-2">
             <div className="form-group">
               <label htmlFor="setTdeeMode">Cálculo de Gasto Energético (TDEE)</label>
               <select
