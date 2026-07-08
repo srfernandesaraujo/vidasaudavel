@@ -17,10 +17,32 @@ import {
   ArrowLeft, 
   Globe,
   PlusCircle,
-  MinusCircle
+  MinusCircle,
+  Heart,
+  Share2,
+  Printer,
+  BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Styles/diet.css';
+const DIETARY_CATEGORIES = [
+  { id: 'vegetariana', name: 'Vegetariana', img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80' },
+  { id: 'vegana', name: 'Vegana', img: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=300&q=80' },
+  { id: 'light', name: 'Light', img: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=300&q=80' },
+  { id: 'fitness', name: 'Fitness', img: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80' },
+  { id: 'diet', name: 'Diet', img: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=300&q=80' },
+  { id: 'sem gluten', name: 'Sem Glúten', img: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=300&q=80' },
+  { id: 'sem lactose', name: 'Sem Lactose', img: 'https://images.unsplash.com/photo-1505253716362-afaea1d3d1af?auto=format&fit=crop&w=300&q=80' },
+  { id: 'detox', name: 'Detox', img: 'https://images.unsplash.com/photo-1610970881699-44a55b4cfd87?auto=format&fit=crop&w=300&q=80' }
+];
+
+const MEAL_TYPES = [
+  { id: 'café da manhã', name: 'Café da Manhã' },
+  { id: 'almoço', name: 'Almoço' },
+  { id: 'lanche', name: 'Lanche' },
+  { id: 'jantar', name: 'Jantar' }
+];
+
 export const Diet: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'daily' | 'planner' | 'recipes' | 'import' | 'shopping' | 'nutri_ai'>('daily');
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -525,6 +547,7 @@ export const Diet: React.FC = () => {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [recipeSearch, setRecipeSearch] = useState('');
   const [cookModeStep, setCookModeStep] = useState<number>(-1); // Modo Cozinheiro (-1 inativo)
+  const [isCookModeFullscreen, setIsCookModeFullscreen] = useState(false);
   const [commentsInput, setCommentsInput] = useState('');
   
   // Ingredientes checados locais para preparar receita
@@ -543,12 +566,87 @@ export const Diet: React.FC = () => {
     tags: 'Fit',
     ingredients: '',
     instructions: '',
-    image: ''
+    image: '',
+    videoUrl: '',
+    dietaryCategories: [] as string[],
+    mealTypes: [] as string[]
   });
+
+  const handleDietaryCategoryToggle = (category: string) => {
+    const current = newRecipeForm.dietaryCategories || [];
+    const updated = current.includes(category) 
+      ? current.filter(c => c !== category)
+      : [...current, category];
+    setNewRecipeForm({ ...newRecipeForm, dietaryCategories: updated });
+  };
+
+  const handleMealTypeToggle = (type: string) => {
+    const current = newRecipeForm.mealTypes || [];
+    const updated = current.includes(type)
+      ? current.filter(t => t !== type)
+      : [...current, type];
+    setNewRecipeForm({ ...newRecipeForm, mealTypes: updated });
+  };
+
+  const handleToggleFavorite = (recipe: Recipe) => {
+    const updated = { ...recipe, isFavorite: !recipe.isFavorite };
+    db.saveRecipe(updated);
+    if (selectedRecipe && selectedRecipe.id === recipe.id) {
+      setSelectedRecipe(updated);
+    }
+    refreshDietData();
+  };
+
+  const handleShareRecipe = () => {
+    if (!selectedRecipe) return;
+    const text = `🍽️ *Receita Vida Saudável: ${selectedRecipe.title}*
+${selectedRecipe.description}
+
+⏱️ *Tempo Total:* ${selectedRecipe.totalTime} min (Prep: ${selectedRecipe.prepTime} min, Cozimento: ${selectedRecipe.cookTime} min)
+👥 *Porções:* Serve ${selectedRecipe.servings}
+
+🛒 *Ingredientes:*
+${selectedRecipe.ingredients.map(i => `- ${i}`).join('\n')}
+
+🍳 *Modo de Preparo:*
+${selectedRecipe.instructions.map((step, idx) => `${idx + 1}. ${step}`).join('\n')}
+
+${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUrl}` : ''}
+`;
+    navigator.clipboard.writeText(text);
+    alert('Informações e receita copiadas para a área de transferência! Pronta para compartilhar.');
+  };
+
+  const handleStartCookMode = () => {
+    setCookModeStep(0);
+    setIsCookModeFullscreen(true);
+  };
+
+  const getYouTubeEmbedUrl = (url?: string): string | null => {
+    if (!url) return null;
+    let videoId = '';
+    try {
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1].split(/[?#]/)[0];
+      } else if (url.includes('youtube.com/watch')) {
+        const urlParams = new URLSearchParams(url.split('?')[1]);
+        videoId = urlParams.get('v') || '';
+      } else if (url.includes('youtube.com/embed/')) {
+        videoId = url.split('youtube.com/embed/')[1].split(/[?#]/)[0];
+      }
+    } catch (e) {
+      console.error('Falha ao extrair ID de vídeo', e);
+    }
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    return null;
+  };
 
   const handleOpenRecipeDetail = (recipe: Recipe) => {
     setSelectedRecipe(recipe);
     setCookModeStep(-1);
+    setIsCookModeFullscreen(false);
     setCheckedIngredients({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -586,7 +684,11 @@ export const Diet: React.FC = () => {
       ingredients: ingArray,
       instructions: instArray,
       tags: tagsArray,
-      comments: []
+      comments: [],
+      dietaryCategories: newRecipeForm.dietaryCategories,
+      mealTypes: newRecipeForm.mealTypes,
+      videoUrl: newRecipeForm.videoUrl.trim(),
+      isFavorite: false
     };
 
     db.saveRecipe(newRecipe);
@@ -602,7 +704,10 @@ export const Diet: React.FC = () => {
       tags: 'Fit',
       ingredients: '',
       instructions: '',
-      image: ''
+      image: '',
+      videoUrl: '',
+      dietaryCategories: [],
+      mealTypes: []
     });
     refreshDietData();
     alert('Receita cadastrada com sucesso!');
@@ -659,14 +764,26 @@ export const Diet: React.FC = () => {
     alert('Ingredientes copiados para a área de transferência!');
   };
 
+  // Filtros avançados de receitas
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedMealType, setSelectedMealType] = useState<string>('');
+
   // Filtro de receitas
   const filteredRecipes = useMemo(() => {
-    return recipes.filter(r => 
-      r.title.toLowerCase().includes(recipeSearch.toLowerCase()) ||
-      r.description.toLowerCase().includes(recipeSearch.toLowerCase()) ||
-      r.tags.some(t => t.toLowerCase().includes(recipeSearch.toLowerCase()))
-    );
-  }, [recipes, recipeSearch]);
+    return recipes.filter(r => {
+      const matchSearch = r.title.toLowerCase().includes(recipeSearch.toLowerCase()) ||
+        r.description.toLowerCase().includes(recipeSearch.toLowerCase()) ||
+        r.tags.some(t => t.toLowerCase().includes(recipeSearch.toLowerCase()));
+      
+      const matchCategory = !selectedCategory || 
+        r.dietaryCategories?.some(cat => cat.toLowerCase() === selectedCategory.toLowerCase());
+      
+      const matchMealType = !selectedMealType ||
+        r.mealTypes?.some(type => type.toLowerCase() === selectedMealType.toLowerCase());
+        
+      return matchSearch && matchCategory && matchMealType;
+    });
+  }, [recipes, recipeSearch, selectedCategory, selectedMealType]);
 
   // -------------------------------------------------------------
   // IMPORTAÇÃO DE RECEITA VIA URL (MEALIE E FALLBACK IA)
@@ -1638,7 +1755,7 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
       {activeSubTab === 'recipes' && !selectedRecipe && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Barra de Filtro e Busca */}
-          <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
+          <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem', marginBottom: '0.5rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem', flex: 1, maxWidth: '400px', position: 'relative' }}>
               <input
                 type="text"
@@ -1655,10 +1772,52 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             </button>
           </div>
 
+          {/* Carrossel de Categorias Dietéticas conforme imagem */}
+          <div className="categories-carousel">
+            {DIETARY_CATEGORIES.map((cat) => (
+              <div 
+                key={cat.id} 
+                className={`category-card ${selectedCategory === cat.id ? 'active' : ''}`}
+                onClick={() => setSelectedCategory(selectedCategory === cat.id ? '' : cat.id)}
+              >
+                <img src={cat.img} alt={cat.name} />
+                <div className="category-card-title">{cat.name}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pílulas de Filtro por Tipo de Refeição */}
+          <div className="meal-filter-pills">
+            <button 
+              className={`meal-pill ${!selectedMealType ? 'active' : ''}`} 
+              onClick={() => setSelectedMealType('')}
+            >
+              Todas as Refeições
+            </button>
+            {MEAL_TYPES.map((meal) => (
+              <button 
+                key={meal.id} 
+                className={`meal-pill ${selectedMealType === meal.id ? 'active' : ''}`}
+                onClick={() => setSelectedMealType(selectedMealType === meal.id ? '' : meal.id)}
+              >
+                {meal.name}
+              </button>
+            ))}
+            {(selectedCategory || selectedMealType) && (
+              <button 
+                className="meal-pill" 
+                style={{ borderColor: 'rgba(255,71,87,0.3)', color: '#ff4757', fontWeight: 'bold' }}
+                onClick={() => { setSelectedCategory(''); setSelectedMealType(''); }}
+              >
+                Limpar Filtros ✕
+              </button>
+            )}
+          </div>
+
           {/* Grid de Receitas */}
           {filteredRecipes.length === 0 ? (
             <div style={{ padding: '4rem 0', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Nenhuma receita encontrada para os termos buscados. Cadastre ou importe receitas na sub-aba anterior!
+              Nenhuma receita encontrada para os filtros selecionados. Cadastre ou importe novas receitas!
             </div>
           ) : (
             <div className="recipes-grid">
@@ -1669,6 +1828,37 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                     <div className="recipe-card-overlay">
                       <span className="recipe-card-badge">{recipe.totalTime} min</span>
                     </div>
+                    {/* Botão Favoritar no Card */}
+                    <button 
+                      type="button"
+                      className="recipe-action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(recipe);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '0.5rem',
+                        right: '0.5rem',
+                        background: 'rgba(9, 11, 17, 0.75)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '50%',
+                        width: '30px',
+                        height: '30px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: recipe.isFavorite ? '#ff4757' : '#fff',
+                        transition: 'var(--transition-smooth)',
+                        zIndex: 10,
+                        padding: 0
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill={recipe.isFavorite ? '#ff4757' : 'none'} stroke={recipe.isFavorite ? '#ff4757' : '#fff'} strokeWidth="2.5">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                    </button>
                   </div>
                   <div className="recipe-card-info">
                     <h3 className="recipe-card-title">{recipe.title}</h3>
@@ -1719,6 +1909,35 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             </div>
           </header>
 
+          {/* Botões de Ações Rápidas da Receita */}
+          <div className="recipe-actions-row">
+            <button 
+              type="button"
+              className={`recipe-action-btn ${selectedRecipe.isFavorite ? 'favorite-active' : ''}`}
+              onClick={() => handleToggleFavorite(selectedRecipe)}
+            >
+              <Heart size={14} fill={selectedRecipe.isFavorite ? 'currentColor' : 'none'} />
+              <span>{selectedRecipe.isFavorite ? 'Favoritada' : 'Favoritar'}</span>
+            </button>
+            <button type="button" className="recipe-action-btn" onClick={handleShareRecipe}>
+              <Share2 size={14} />
+              <span>Compartilhar</span>
+            </button>
+            <button type="button" className="recipe-action-btn" onClick={() => window.print()}>
+              <Printer size={14} />
+              <span>Imprimir</span>
+            </button>
+            <button 
+              type="button" 
+              className="recipe-action-btn" 
+              style={{ borderColor: 'var(--accent-orange)', color: 'var(--accent-orange)' }}
+              onClick={handleStartCookMode}
+            >
+              <BookOpen size={14} />
+              <span>Modo Cozinheiro (Tela Cheia)</span>
+            </button>
+          </div>
+
           {/* Banner de Imagem com botões de overlay */}
           <div className="recipe-detail-banner">
             <img className="recipe-detail-img" src={selectedRecipe.image} alt={selectedRecipe.title} />
@@ -1751,6 +1970,30 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               <span className="val">Serve {selectedRecipe.servings}</span>
             </div>
           </div>
+
+          {/* Vídeo explicativo embutido */}
+          {selectedRecipe.videoUrl && (
+            (() => {
+              const embedUrl = getYouTubeEmbedUrl(selectedRecipe.videoUrl);
+              return embedUrl ? (
+                <div className="recipe-video-container">
+                  <iframe 
+                    src={embedUrl} 
+                    title={`Como fazer ${selectedRecipe.title}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Globe size={16} color="var(--accent-orange)" />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Link do vídeo cadastrado: <a href={selectedRecipe.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-orange)', textDecoration: 'underline' }}>{selectedRecipe.videoUrl}</a>
+                  </span>
+                </div>
+              );
+            })()
+          )}
 
           {/* Grid de Conteúdo: Ingredientes (esquerda) e Preparo (direita) */}
           <div className="recipe-detail-grid">
@@ -2377,6 +2620,60 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               </div>
 
               <div className="form-group">
+                <label htmlFor="recVideo">Link do Vídeo explicativo (YouTube / Vimeo)</label>
+                <input
+                  id="recVideo"
+                  type="text"
+                  className="form-control"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={newRecipeForm.videoUrl}
+                  onChange={(e) => setNewRecipeForm({ ...newRecipeForm, videoUrl: e.target.value })}
+                />
+              </div>
+
+              {/* Categorias Dietéticas */}
+              <div className="form-group">
+                <label style={{ fontWeight: 600 }}>Categorias Dietéticas (Selecione todas que se aplicam)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem', marginTop: '0.35rem' }}>
+                  {['Vegetariana', 'Vegana', 'Light', 'Fitness', 'Diet', 'Sem Glúten', 'Sem Lactose', 'Detox'].map((cat) => {
+                    const checked = newRecipeForm.dietaryCategories.includes(cat);
+                    return (
+                      <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleDietaryCategoryToggle(cat)}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        <span>{cat}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Tipos de Refeição */}
+              <div className="form-group">
+                <label style={{ fontWeight: 600 }}>Tipos de Refeição (Onde servir)</label>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                  {['Café da Manhã', 'Almoço', 'Lanche', 'Jantar'].map((type) => {
+                    const checked = newRecipeForm.mealTypes.includes(type);
+                    return (
+                      <label key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleMealTypeToggle(type)}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        <span>{type}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="form-group">
                 <label htmlFor="recIng">Ingredientes (Um por linha)</label>
                 <textarea
                   id="recIng"
@@ -2409,6 +2706,109 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddRecipeModal(false)}>Cancelar</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODO COZINHEIRO TELA CHEIA ABSOLUTA */}
+      {isCookModeFullscreen && selectedRecipe && (
+        <div className="cook-mode-fullscreen">
+          <div className="cook-mode-header">
+            <h2 className="cook-mode-title">
+              🍳 Modo Cozinheiro: {selectedRecipe.title}
+            </h2>
+            <button 
+              type="button" 
+              className="cook-mode-close-btn"
+              onClick={() => {
+                setIsCookModeFullscreen(false);
+                setCookModeStep(-1);
+              }}
+            >
+              Sair do Modo Cozinheiro ✕
+            </button>
+          </div>
+
+          <div className="cook-mode-content-grid">
+            {/* Coluna Esquerda: Ingredientes */}
+            <div className="cook-mode-sidebar">
+              <h3>Checklist de Ingredientes</h3>
+              <div className="cook-mode-ingredients-list">
+                {selectedRecipe.ingredients.map((ing, idx) => {
+                  const isChecked = !!checkedIngredients[idx];
+                  return (
+                    <label 
+                      key={idx} 
+                      className={`cook-mode-ingredient-item ${isChecked ? 'completed' : ''}`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => setCheckedIngredients({ ...checkedIngredients, [idx]: !isChecked })}
+                      />
+                      <span>{ing}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Coluna Direita: Passo Atual com Letras Garrafais */}
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'left' }}>
+              <div className="cook-mode-main-content">
+                <span className="cook-mode-step-indicator">
+                  Passo {cookModeStep + 1} de {selectedRecipe.instructions.length}
+                </span>
+                
+                <p className="cook-mode-step-text">
+                  {selectedRecipe.instructions[cookModeStep]}
+                </p>
+
+                <div className="cook-mode-controls">
+                  <button 
+                    type="button"
+                    className="cook-mode-btn prev"
+                    disabled={cookModeStep === 0}
+                    onClick={() => setCookModeStep(cookModeStep - 1)}
+                    style={{ opacity: cookModeStep === 0 ? 0.3 : 1, cursor: cookModeStep === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    ◀ Passo Anterior
+                  </button>
+
+                  {cookModeStep < selectedRecipe.instructions.length - 1 ? (
+                    <button 
+                      type="button"
+                      className="cook-mode-btn next"
+                      onClick={() => setCookModeStep(cookModeStep + 1)}
+                    >
+                      Próximo Passo ▶
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      className="cook-mode-btn next"
+                      style={{ background: '#10b981', borderColor: '#10b981' }}
+                      onClick={() => {
+                        setIsCookModeFullscreen(false);
+                        setCookModeStep(-1);
+                        handleUpdateLastMade(selectedRecipe.id);
+                        alert('Parabéns! Você completou a receita! Preparo registrado.');
+                      }}
+                    >
+                      ✓ Concluir Receita
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Barra de Progresso */}
+              <div className="cook-mode-progress-bar">
+                <div 
+                  className="cook-mode-progress-fill"
+                  style={{ width: `${((cookModeStep + 1) / selectedRecipe.instructions.length) * 100}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

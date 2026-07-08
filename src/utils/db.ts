@@ -117,6 +117,10 @@ export interface Recipe {
     text: string;
     date: string;
   }[];
+  dietaryCategories?: string[]; // Vegetariana, Vegana, light, fitness, Diet, sem gluten, sem lactose, Detox
+  mealTypes?: string[];         // Café da manhã, almoço, lanche, jantar, etc.
+  videoUrl?: string;            // Link de vídeo (ex: YouTube)
+  isFavorite?: boolean;         // Marcador de favorito
 }
 
 export interface MealPlanItem {
@@ -233,7 +237,11 @@ const INITIAL_RECIPES: Recipe[] = [
     tags: ['Fit', 'Café da Manhã'],
     comments: [
       { id: 'c-1', user: 'Atleta Saudável', text: 'Receita incrível! A gema mole no ponto certo faz toda a diferença.', date: '2026-07-08' }
-    ]
+    ],
+    dietaryCategories: ['Fitness'],
+    mealTypes: ['Café da Manhã'],
+    videoUrl: 'https://www.youtube.com/watch?v=Jm21y1H0R9Q',
+    isFavorite: false
   },
   {
     id: 'rec-2',
@@ -260,7 +268,11 @@ const INITIAL_RECIPES: Recipe[] = [
       'Despeje as claras batidas sobre os legumes, tampe a frigideira e cozinhe em fogo baixo até dourar e firmar dos dois lados.'
     ],
     tags: ['Low Carb', 'Jantar', 'Proteico'],
-    comments: []
+    comments: [],
+    dietaryCategories: ['Fitness', 'Light', 'Sem Glúten', 'Sem Lactose'],
+    mealTypes: ['Lanche', 'Jantar'],
+    videoUrl: 'https://www.youtube.com/watch?v=q6t8J_NswjA',
+    isFavorite: true
   }
 ];
 
