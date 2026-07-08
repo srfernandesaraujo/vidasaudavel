@@ -1164,23 +1164,24 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
       shoppingLogs.map(item => `- ${item}`).join('\n') +
       `\n\nAbraços,\nEquipe Vida Saudável`;
 
-    // 1. Geração do Design Premium HTML do E-mail
+    // 1. Geração do Design Premium HTML do E-mail (Inspirado no visual SaaS da imagem 2)
     const ingredientsRows = consolidatedIngredients.length > 0 
       ? consolidatedIngredients.map(ing => `
           <tr style="border-bottom: 1px solid #1f2232;">
-            <td style="padding: 12px 15px; font-weight: 600; color: #ffffff; font-size: 15px; text-align: left;">
-              ${ing.quantityNum > 0 ? `<span style="color: #2563eb; font-weight: bold;">${ing.quantityNum.toFixed(1)}</span> ` : ''}${ing.nameOnly}
+            <td style="padding: 12px 10px; font-weight: 600; color: #ffffff; font-size: 14px; text-align: left;">
+              ${ing.nameOnly}
             </td>
-            <td style="padding: 12px 15px; text-align: right; font-size: 13px; color: #9ba1b0;">
-              <span style="background: #1f2232; padding: 4px 8px; border-radius: 4px; display: inline-block; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${ing.recipeName}
-              </span>
+            <td style="padding: 12px 10px; font-weight: 600; color: #9ba1b0; font-size: 13px; text-align: left;">
+              ${ing.recipeName}
+            </td>
+            <td style="padding: 12px 10px; text-align: right; font-weight: 700; color: #3b82f6; font-size: 14px;">
+              ${ing.quantityNum > 0 ? ing.quantityNum.toFixed(1) : '1.0'}
             </td>
           </tr>
         `).join('')
       : `
           <tr>
-            <td colspan="2" style="padding: 20px; text-align: center; color: #535868; font-style: italic;">
+            <td colspan="3" style="padding: 20px; text-align: center; color: #535868; font-style: italic;">
               Nenhum ingrediente planejado para esta semana.
             </td>
           </tr>
@@ -1189,8 +1190,11 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
     const manualRows = shoppingLogs.length > 0
       ? shoppingLogs.map(item => `
           <tr style="border-bottom: 1px solid #1f2232;">
-            <td colspan="2" style="padding: 12px 15px; color: #ffffff; font-size: 15px; text-align: left;">
-              <span style="color: #f97316; margin-right: 8px;">•</span> ${item}
+            <td style="padding: 12px 10px; color: #ffffff; font-weight: 600; font-size: 14px; text-align: left;">
+              ${item}
+            </td>
+            <td style="padding: 12px 10px; text-align: right; font-weight: 700; color: #f97316; font-size: 14px;">
+              Pendente
             </td>
           </tr>
         `).join('')
@@ -1210,49 +1214,76 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Sua Lista de Compras Vida Saudável</title>
       </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #07080c; color: #ffffff; margin: 0; padding: 0;">
-        <div style="background-color: #07080c; padding: 40px 20px; min-height: 100vh;">
-          <div style="max-width: 600px; margin: 0 auto; background-color: #11131a; border: 1px solid #1f2232; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);">
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #07080c; color: #ffffff; margin: 0; padding: 40px 10px;">
+        <div style="background-color: #07080c; padding: 20px 0; min-height: 100vh;">
+          <div style="max-width: 550px; margin: 0 auto; background-color: #11131a; border: 1px solid #1f2232; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);">
             
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, #2563eb, #1d4ed8); padding: 35px 40px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Vida Saudável</h1>
-              <p style="margin: 6px 0 0 0; color: #93c5fd; font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Sua Lista de Compras Semanal</p>
+            <!-- Header (Organiza Style: Solid Gradient Header) -->
+            <div style="background: linear-gradient(135deg, #2563eb, #1d4ed8); padding: 40px 20px; text-align: center; border-bottom: 1px solid #1f2232;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">Vida Saudável</h1>
+              <p style="margin: 8px 0 0 0; color: #93c5fd; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;">Planejamento de Nutrição Inteligente</p>
             </div>
             
             <!-- Content -->
-            <div style="padding: 40px;">
-              <p style="font-size: 16px; line-height: 1.6; color: #9ba1b0; margin-top: 0; margin-bottom: 30px; text-align: left;">
-                Olá, <strong>${settings.userName}</strong>!<br><br>
-                Aqui está a sua lista de compras consolidada com base nas refeições do seu cardápio planejado para esta semana. Tudo pronto para ajudar você a manter sua dieta com facilidade e foco nos treinos!
+            <div style="padding: 40px 30px; background-color: #11131a;">
+              <p style="font-size: 15px; line-height: 1.6; color: #ffffff; margin-top: 0; margin-bottom: 8px; text-align: left;">
+                Olá,
+              </p>
+              <p style="font-size: 15px; line-height: 1.6; color: #9ba1b0; margin-top: 0; margin-bottom: 35px; text-align: left;">
+                Aqui está a lista consolidada de compras e suprimentos para o seu planejamento alimentar desta semana:
               </p>
               
-              <!-- Ingredients Section -->
-              <h3 style="font-size: 14px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; border-bottom: 1px solid #1f2232; padding-bottom: 8px; text-align: left;">
-                Ingredientes das Refeições
-              </h3>
-              <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 30px;">
-                <tbody>
-                  ${ingredientsRows}
-                </tbody>
-              </table>
+              <!-- Ingredients Section (Organiza Style: Circle + Title + Table) -->
+              <div style="margin-bottom: 35px;">
+                <h3 style="font-size: 13px; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px 0; text-align: left; display: inline-flex; align-items: center;">
+                  <span style="display: inline-block; width: 12px; height: 12px; background-color: #3b82f6; border-radius: 50%; margin-right: 8px; vertical-align: middle;"></span>
+                  Ingredientes das Refeições (${consolidatedIngredients.length})
+                </h3>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid #1f2232;">
+                      <th style="padding: 8px 10px; color: #535868; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; text-align: left;">Descrição</th>
+                      <th style="padding: 8px 10px; color: #535868; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; text-align: left;">Receita</th>
+                      <th style="padding: 8px 10px; color: #535868; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; text-align: right;">Qtd</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${ingredientsRows}
+                  </tbody>
+                </table>
+              </div>
               
               <!-- Manual Items Section -->
-              <h3 style="font-size: 14px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; border-bottom: 1px solid #1f2232; padding-bottom: 8px; text-align: left;">
-                Itens Manuais Adicionados
-              </h3>
-              <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 10px;">
-                <tbody>
-                  ${manualRows}
-                </tbody>
-              </table>
+              <div style="margin-bottom: 45px;">
+                <h3 style="font-size: 13px; font-weight: 700; color: #f97316; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px 0; text-align: left; display: inline-flex; align-items: center;">
+                  <span style="display: inline-block; width: 12px; height: 12px; background-color: #f97316; border-radius: 50%; margin-right: 8px; vertical-align: middle;"></span>
+                  Itens Manuais Adicionados (${shoppingLogs.length})
+                </h3>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid #1f2232;">
+                      <th style="padding: 8px 10px; color: #535868; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; text-align: left;">Descrição</th>
+                      <th style="padding: 8px 10px; color: #535868; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; text-align: right;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${manualRows}
+                  </tbody>
+                </table>
+              </div>
+              
+              <!-- CTA Button (Organiza Style: Pill shape, gradient, shadow) -->
+              <div style="text-align: center; margin: 30px 0 10px 0;">
+                <a href="https://vidasaudavel.posologia.app" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: 700; font-size: 14px; border-radius: 10px; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35); text-transform: uppercase; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">
+                  Abrir Vida Saudável
+                </a>
+              </div>
               
             </div>
             
             <!-- Footer -->
-            <div style="background-color: #141620; padding: 25px 40px; text-align: center; border-top: 1px solid #1f2232; font-size: 12px; color: #535868;">
-              <p style="margin: 0 0 8px 0;">Este e-mail foi gerado automaticamente pelo seu planejador Vida Saudável.</p>
-              <p style="margin: 0;">© 2026 Vida Saudável. Todos os direitos reservados.</p>
+            <div style="background-color: #141620; padding: 25px 30px; text-align: center; border-top: 1px solid #1f2232; font-size: 11px; color: #535868; letter-spacing: 0.5px;">
+              <p style="margin: 0 0 6px 0;">Vida Saudável © 2026. Todos os direitos reservados.</p>
             </div>
             
           </div>
