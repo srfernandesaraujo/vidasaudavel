@@ -1164,7 +1164,104 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
       shoppingLogs.map(item => `- ${item}`).join('\n') +
       `\n\nAbraços,\nEquipe Vida Saudável`;
 
-    // 1. Tenta enviar via Resend API se a chave estiver configurada
+    // 1. Geração do Design Premium HTML do E-mail
+    const ingredientsRows = consolidatedIngredients.length > 0 
+      ? consolidatedIngredients.map(ing => `
+          <tr style="border-bottom: 1px solid #1f2232;">
+            <td style="padding: 12px 15px; font-weight: 600; color: #ffffff; font-size: 15px; text-align: left;">
+              ${ing.quantityNum > 0 ? `<span style="color: #2563eb; font-weight: bold;">${ing.quantityNum.toFixed(1)}</span> ` : ''}${ing.nameOnly}
+            </td>
+            <td style="padding: 12px 15px; text-align: right; font-size: 13px; color: #9ba1b0;">
+              <span style="background: #1f2232; padding: 4px 8px; border-radius: 4px; display: inline-block; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${ing.recipeName}
+              </span>
+            </td>
+          </tr>
+        `).join('')
+      : `
+          <tr>
+            <td colspan="2" style="padding: 20px; text-align: center; color: #535868; font-style: italic;">
+              Nenhum ingrediente planejado para esta semana.
+            </td>
+          </tr>
+        `;
+
+    const manualRows = shoppingLogs.length > 0
+      ? shoppingLogs.map(item => `
+          <tr style="border-bottom: 1px solid #1f2232;">
+            <td colspan="2" style="padding: 12px 15px; color: #ffffff; font-size: 15px; text-align: left;">
+              <span style="color: #f97316; margin-right: 8px;">•</span> ${item}
+            </td>
+          </tr>
+        `).join('')
+      : `
+          <tr>
+            <td colspan="2" style="padding: 20px; text-align: center; color: #535868; font-style: italic;">
+              Nenhum item manual adicionado.
+            </td>
+          </tr>
+        `;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sua Lista de Compras Vida Saudável</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #07080c; color: #ffffff; margin: 0; padding: 0;">
+        <div style="background-color: #07080c; padding: 40px 20px; min-height: 100vh;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #11131a; border: 1px solid #1f2232; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #2563eb, #1d4ed8); padding: 35px 40px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Vida Saudável</h1>
+              <p style="margin: 6px 0 0 0; color: #93c5fd; font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Sua Lista de Compras Semanal</p>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 40px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #9ba1b0; margin-top: 0; margin-bottom: 30px; text-align: left;">
+                Olá, <strong>${settings.userName}</strong>!<br><br>
+                Aqui está a sua lista de compras consolidada com base nas refeições do seu cardápio planejado para esta semana. Tudo pronto para ajudar você a manter sua dieta com facilidade e foco nos treinos!
+              </p>
+              
+              <!-- Ingredients Section -->
+              <h3 style="font-size: 14px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; border-bottom: 1px solid #1f2232; padding-bottom: 8px; text-align: left;">
+                Ingredientes das Refeições
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 30px;">
+                <tbody>
+                  ${ingredientsRows}
+                </tbody>
+              </table>
+              
+              <!-- Manual Items Section -->
+              <h3 style="font-size: 14px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; border-bottom: 1px solid #1f2232; padding-bottom: 8px; text-align: left;">
+                Itens Manuais Adicionados
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 10px;">
+                <tbody>
+                  ${manualRows}
+                </tbody>
+              </table>
+              
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #141620; padding: 25px 40px; text-align: center; border-top: 1px solid #1f2232; font-size: 12px; color: #535868;">
+              <p style="margin: 0 0 8px 0;">Este e-mail foi gerado automaticamente pelo seu planejador Vida Saudável.</p>
+              <p style="margin: 0;">© 2026 Vida Saudável. Todos os direitos reservados.</p>
+            </div>
+            
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // 2. Tenta enviar via Resend API se a chave estiver configurada
     if (settings.resendApiKey) {
       try {
         const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
@@ -1182,7 +1279,8 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
             from: formattedFrom,
             to: settings.emailForList,
             subject: emailSubject,
-            text: emailBody
+            text: emailBody,
+            html: emailHtml
           })
         });
 
