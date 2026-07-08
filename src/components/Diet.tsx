@@ -1170,38 +1170,60 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
         const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
         const formattedFrom = fromEmail.includes('<') ? fromEmail : `Vida Saudável <${fromEmail}>`;
 
-        // Usamos o corsproxy.io para contornar o bloqueio de CORS do navegador ao acessar a API do Resend diretamente
-        const res = await fetch('https://corsproxy.io/?https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${settings.resendApiKey}`
-          },
-          body: JSON.stringify({
-            from: formattedFrom,
-            to: settings.emailForList,
-            subject: emailSubject,
-            text: emailBody
-          })
-        });
+        let res: Response | null = null;
+        try {
+          // Proxy Primário
+          res = await fetch('https://corsproxy.io/?https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${settings.resendApiKey}`
+            },
+            body: JSON.stringify({
+              from: formattedFrom,
+              to: settings.emailForList,
+              subject: emailSubject,
+              text: emailBody
+            })
+          });
+        } catch (firstProxyErr) {
+          console.warn('Falha no corsproxy.io, tentando proxy secundário (thingproxy):', firstProxyErr);
+          // Proxy Secundário
+          res = await fetch('https://thingproxy.freeboard.io/fetch/https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${settings.resendApiKey}`
+            },
+            body: JSON.stringify({
+              from: formattedFrom,
+              to: settings.emailForList,
+              subject: emailSubject,
+              text: emailBody
+            })
+          });
+        }
 
-        if (res.ok) {
+        if (res && res.ok) {
           alert('Lista de compras enviada com sucesso para o seu e-mail via Resend API!');
           return;
         } else {
-          const errBody = await res.text();
+          const errBody = res ? await res.text() : 'Sem resposta do proxy CORS.';
           console.warn('Erro ao disparar via Resend:', errBody);
-          alert(`Erro na API do Resend: ${errBody}. Usando fallback...`);
+          alert(`Erro na API do Resend: ${errBody}.\n\nPor favor, verifique se a sua chave de API é válida e se o e-mail de origem está configurado e verificado no painel do Resend.`);
+          return; // Para a execução aqui, NÃO abre mailto!
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Falha de rede ao disparar e-mail via Resend:', err);
+        alert(`Erro de conexão ao enviar e-mail via Resend: ${err.message || err}`);
+        return; // Para a execução aqui, NÃO abre mailto!
       }
     }
 
-    // 2. Fallback mailto: abre o cliente de email do usuário
+    // 2. Fallback mailto: abre o cliente de email do usuário (apenas se a API NÃO estiver configurada!)
     const mailtoUrl = `mailto:${encodeURIComponent(settings.emailForList)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
     window.open(mailtoUrl, '_blank');
-    alert('Tentando abrir o seu aplicativo de e-mail local pré-configurado com a lista formatada...');
+    alert('Como você não possui chave do Resend configurada, abrimos o seu aplicativo de e-mail local para enviar a lista.');
   };
 
   // -------------------------------------------------------------
