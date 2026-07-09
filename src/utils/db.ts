@@ -17,6 +17,9 @@ export interface Exercise {
   repetitions: string;
   prWeight: number;
   notes: string;
+  executionType?: 'reps' | 'time';
+  instructions?: string;
+  image?: string;
 }
 
 export interface Workout {

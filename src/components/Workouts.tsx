@@ -12,7 +12,8 @@ import {
   ChevronUp,
   FileText,
   Activity,
-  Award
+  Award,
+  Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Styles/workouts.css';
@@ -139,6 +140,7 @@ export const Workouts: React.FC = () => {
   }, [logs]);
 
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const [selectedExerciseForView, setSelectedExerciseForView] = useState<Exercise | null>(null);
   const [exerciseForm, setExerciseForm] = useState({
     name: '',
     muscleGroup: 'Peitoral',
@@ -146,7 +148,10 @@ export const Workouts: React.FC = () => {
     series: 4,
     repetitions: '10',
     prWeight: 0,
-    notes: ''
+    notes: '',
+    executionType: 'reps',
+    instructions: '',
+    image: ''
   });
 
   // Controle de colapsáveis (Cardio e Observações)
@@ -230,7 +235,10 @@ export const Workouts: React.FC = () => {
       series: 4,
       repetitions: '10',
       prWeight: 0,
-      notes: ''
+      notes: '',
+      executionType: 'reps',
+      instructions: '',
+      image: ''
     });
     setIsExerciseModalOpen(true);
   };
@@ -244,7 +252,10 @@ export const Workouts: React.FC = () => {
       series: exercise.series,
       repetitions: exercise.repetitions,
       prWeight: exercise.prWeight,
-      notes: exercise.notes
+      notes: exercise.notes,
+      executionType: exercise.executionType || 'reps',
+      instructions: exercise.instructions || '',
+      image: exercise.image || ''
     });
     setIsExerciseModalOpen(true);
   };
@@ -261,12 +272,54 @@ export const Workouts: React.FC = () => {
       series: Number(exerciseForm.series),
       repetitions: exerciseForm.repetitions,
       prWeight: Number(exerciseForm.prWeight),
-      notes: exerciseForm.notes
+      notes: exerciseForm.notes,
+      executionType: exerciseForm.executionType as 'reps' | 'time',
+      instructions: exerciseForm.instructions,
+      image: exerciseForm.image
     });
 
     setIsExerciseModalOpen(false);
     setEditingExercise(null);
     refreshData();
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const max_size = 400; // Limita a largura/altura para compactar na memória
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > max_size) {
+              height *= max_size / width;
+              width = max_size;
+            }
+          } else {
+            if (height > max_size) {
+              width *= max_size / height;
+              height = max_size;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); // 60% qualidade JPEG
+            setExerciseForm(prev => ({ ...prev, image: compressedBase64 }));
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDeleteExercise = (id: string) => {
@@ -686,7 +739,7 @@ export const Workouts: React.FC = () => {
                                   <th>Grupo</th>
                                   <th>Exercício</th>
                                   <th>Séries</th>
-                                  <th>Reps</th>
+                                  <th>Reps/Tempo</th>
                                   <th>PR Carga</th>
                                   <th>Último</th>
                                   <th>Dias</th>
@@ -704,7 +757,23 @@ export const Workouts: React.FC = () => {
                                           {ex.muscleGroup}
                                         </span>
                                       </td>
-                                      <td style={{ fontWeight: 600 }}>{ex.name}</td>
+                                      <td style={{ fontWeight: 600 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                          <button 
+                                            type="button"
+                                            onClick={() => setSelectedExerciseForView(ex)}
+                                            style={{ background: 'none', border: 'none', color: '#ffffff', font: 'inherit', cursor: 'pointer', padding: 0, fontWeight: 600, textDecoration: 'underline', textAlign: 'left' }}
+                                            title="Ver detalhes do exercício"
+                                          >
+                                            {ex.name}
+                                          </button>
+                                          {(ex.instructions || ex.image) && (
+                                            <span style={{ display: 'inline-flex', cursor: 'pointer' }} onClick={() => setSelectedExerciseForView(ex)} title="Possui guia de execução">
+                                              <Eye size={12} color="#3b82f6" />
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
                                       <td>{ex.series}</td>
                                       <td>{ex.repetitions}</td>
                                       <td>
@@ -798,7 +867,7 @@ export const Workouts: React.FC = () => {
               <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsExerciseModalOpen(false)}>X</button>
             </div>
             <form onSubmit={handleSaveExercise}>
-              <div className="modal-body">
+              <div className="modal-body" style={{ maxHeight: '420px', overflowY: 'auto' }}>
                 <div className="form-group">
                   <label htmlFor="exName">Nome do Exercício</label>
                   <input
@@ -844,6 +913,32 @@ export const Workouts: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="form-group">
+                  <label>Tipo de Execução</label>
+                  <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="radio"
+                        name="executionType"
+                        value="reps"
+                        checked={exerciseForm.executionType === 'reps'}
+                        onChange={() => setExerciseForm({ ...exerciseForm, executionType: 'reps' })}
+                      />
+                      Repetições
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="radio"
+                        name="executionType"
+                        value="time"
+                        checked={exerciseForm.executionType === 'time'}
+                        onChange={() => setExerciseForm({ ...exerciseForm, executionType: 'time' })}
+                      />
+                      Tempo (Duração)
+                    </label>
+                  </div>
+                </div>
+
                 <div className="grid-cols-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label htmlFor="exSeries">Séries</label>
@@ -860,12 +955,14 @@ export const Workouts: React.FC = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="exReps">Repetições</label>
+                    <label htmlFor="exReps">
+                      {exerciseForm.executionType === 'time' ? 'Tempo (ex: 30s)' : 'Repetições'}
+                    </label>
                     <input
                       id="exReps"
                       type="text"
                       className="form-control"
-                      placeholder="Ex: 10 ou 8-12"
+                      placeholder={exerciseForm.executionType === 'time' ? 'Ex: 30s' : 'Ex: 10 ou 8-12'}
                       value={exerciseForm.repetitions}
                       onChange={(e) => setExerciseForm({ ...exerciseForm, repetitions: e.target.value })}
                       required
@@ -886,7 +983,48 @@ export const Workouts: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="exNotes">Anotações / Instruções</label>
+                  <label htmlFor="exInstructions">Instruções Passo a Passo</label>
+                  <textarea
+                    id="exInstructions"
+                    className="form-control"
+                    rows={3}
+                    placeholder="Descreva o passo a passo da execução do movimento..."
+                    value={exerciseForm.instructions}
+                    onChange={(e) => setExerciseForm({ ...exerciseForm, instructions: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="exImage">Imagem Demonstrativa (Guia Visual)</label>
+                  <input
+                    id="exImage"
+                    type="file"
+                    accept="image/*"
+                    className="form-control"
+                    onChange={handleImageUpload}
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                  {exerciseForm.image && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+                      <img 
+                        src={exerciseForm.image} 
+                        alt="Preview" 
+                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-subtle)' }} 
+                      />
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ padding: '0.25rem 0.5rem', color: '#ff6b6b', fontSize: '0.75rem' }}
+                        onClick={() => setExerciseForm(prev => ({ ...prev, image: '' }))}
+                      >
+                        Remover Imagem
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="exNotes">Observações Adicionais</label>
                   <textarea
                     id="exNotes"
                     className="form-control"
@@ -1011,6 +1149,72 @@ export const Workouts: React.FC = () => {
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setIsTemplateModalOpen(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Visualizar Detalhes do Exercício */}
+      {selectedExerciseForView && (
+        <div className="modal-overlay" onClick={() => setSelectedExerciseForView(null)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Activity size={20} color="var(--accent-blue)" />
+                Detalhes do Exercício
+              </h3>
+              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setSelectedExerciseForView(null)}>X</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
+              <div>
+                <h4 style={{ fontSize: '1.35rem', margin: '0 0 0.25rem 0', color: '#ffffff' }}>{selectedExerciseForView.name}</h4>
+                <span className="badge badge-superior" style={{ display: 'inline-block' }}>{selectedExerciseForView.muscleGroup}</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Séries e Execução</span>
+                  <div style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', marginTop: '0.15rem' }}>
+                    {selectedExerciseForView.series} séries x {selectedExerciseForView.repetitions}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Recorde Pessoal (PR)</span>
+                  <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-blue)', marginTop: '0.15rem' }}>
+                    {selectedExerciseForView.prWeight > 0 ? `${selectedExerciseForView.prWeight} kg` : 'Sem registro'}
+                  </div>
+                </div>
+              </div>
+
+              {selectedExerciseForView.instructions && (
+                <div>
+                  <h5 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 0.5rem 0', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>Instruções de Execução</h5>
+                  <p style={{ fontSize: '0.9rem', color: '#e2e8f0', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                    {selectedExerciseForView.instructions}
+                  </p>
+                </div>
+              )}
+
+              {selectedExerciseForView.image && (
+                <div>
+                  <h5 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 0.5rem 0', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>Guia Visual</h5>
+                  <img 
+                    src={selectedExerciseForView.image} 
+                    alt={`Guia de execução para ${selectedExerciseForView.name}`}
+                    style={{ width: '100%', maxHeight: '250px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)' }} 
+                  />
+                </div>
+              )}
+
+              {selectedExerciseForView.notes && !selectedExerciseForView.instructions && (
+                <div>
+                  <h5 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 0.5rem 0', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>Anotações</h5>
+                  <p style={{ fontSize: '0.9rem', color: '#e2e8f0', margin: 0 }}>{selectedExerciseForView.notes}</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setSelectedExerciseForView(null)}>Fechar</button>
             </div>
           </div>
         </div>
