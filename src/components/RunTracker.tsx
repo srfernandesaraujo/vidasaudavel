@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db, type RunLog, type BodyCompLog } from '../utils/db';
 import { 
   Footprints, 
@@ -82,6 +82,28 @@ export const RunTracker: React.FC = () => {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
 
+  const handleOpenBodyModal = () => {
+    const latest = bodyCompLogs.length > 0 ? bodyCompLogs[bodyCompLogs.length - 1] : null;
+    setBodyForm({
+      date: new Date().toISOString().split('T')[0],
+      weight: '',
+      idealWeight: latest ? String(latest.idealWeight) : '',
+      bodyFat: '',
+      bodyFatGoal: latest ? String(latest.bodyFatGoal) : '',
+      muscleMass: '',
+      muscleMassGoal: latest ? String(latest.muscleMassGoal) : '',
+      bodyWater: latest ? String(latest.bodyWater) : '',
+      boneMass: latest ? String(latest.boneMass) : '',
+      basalMetabolism: latest ? String(latest.basalMetabolism) : '',
+      proteins: latest ? String(latest.proteins) : '',
+      visceralFat: '',
+      visceralFatGoal: latest ? String(latest.visceralFatGoal) : '',
+      metabolicAge: latest ? String(latest.metabolicAge) : '',
+      heartRate: latest ? String(latest.heartRate) : ''
+    });
+    setIsBodyModalOpen(true);
+  };
+
   // Forms
   const [runForm, setRunForm] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -108,6 +130,43 @@ export const RunTracker: React.FC = () => {
     metabolicAge: '',
     heartRate: ''
   });
+
+  // Efeito para calcular TMB e Idade Metabólica automaticamente conforme o peso/gordura/músculo mudam
+  useEffect(() => {
+    const weightNum = Number(bodyForm.weight);
+    const fatNum = Number(bodyForm.bodyFat);
+    const muscleNum = Number(bodyForm.muscleMass);
+
+    if (weightNum > 0) {
+      const settings = db.getSettings();
+      const age = settings.age || 30;
+      const height = settings.height || 175;
+
+      // 1. TMB (Basal) via Katch-McArdle se houver percentual de gordura, caso contrário Mifflin-St Jeor
+      let computedBMR = 1600;
+      if (fatNum > 0) {
+        const lbm = weightNum * (1 - fatNum / 100);
+        computedBMR = Math.round(370 + 21.6 * lbm);
+      } else {
+        computedBMR = Math.round(10 * weightNum + 6.25 * height - 5 * age + 5);
+      }
+
+      // 2. Idade Metabólica aproximada baseada na composição corporal
+      let computedMetabolicAge = age;
+      if (fatNum > 0 && muscleNum > 0) {
+        const muscleRatio = muscleNum / weightNum;
+        const fatOffset = (fatNum - 18) * 0.4;
+        const muscleOffset = (muscleRatio - 0.4) * 30;
+        computedMetabolicAge = Math.max(12, Math.round(age + fatOffset - muscleOffset));
+      }
+
+      setBodyForm(prev => ({
+        ...prev,
+        basalMetabolism: String(computedBMR),
+        metabolicAge: String(computedMetabolicAge)
+      }));
+    }
+  }, [bodyForm.weight, bodyForm.bodyFat, bodyForm.muscleMass]);
 
   const refreshData = () => {
     setRunLogs(db.getRunLogs());
@@ -492,7 +551,7 @@ export const RunTracker: React.FC = () => {
               Registrar Corrida
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={() => setIsBodyModalOpen(true)}>
+            <button className="btn btn-primary" onClick={handleOpenBodyModal}>
               <Plus size={16} />
               Registrar Biometria
             </button>
