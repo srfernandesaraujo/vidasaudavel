@@ -510,6 +510,27 @@ export const db = {
     saveToStorage(KEYS.BODY_COMP, logs);
     removeFromFirestore('body_comp_logs', id);
   },
+  updateBodyCompLog: (id: string, log: Omit<BodyCompLog, 'id' | 'bmi' | 'leanMass'>): void => {
+    const logs = db.getBodyCompLogs();
+    const index = logs.findIndex(l => l.id === id);
+    if (index >= 0) {
+      const settings = db.getSettings();
+      const heightInMeters = settings.height / 100;
+      const bmi = heightInMeters > 0 ? Number((log.weight / (heightInMeters * heightInMeters)).toFixed(1)) : 0;
+      const leanMass = Number((log.weight * (1 - log.bodyFat / 100)).toFixed(1));
+
+      const updatedLog: BodyCompLog = {
+        ...log,
+        id,
+        bmi,
+        leanMass
+      };
+      logs[index] = updatedLog;
+      logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      saveToStorage(KEYS.BODY_COMP, logs);
+      writeToFirestore('body_comp_logs', id, updatedLog);
+    }
+  },
 
   // Calendário de Corridas Inscritas
   getRaces: (): RaceRegistration[] => getFromStorage(KEYS.RACES, []),

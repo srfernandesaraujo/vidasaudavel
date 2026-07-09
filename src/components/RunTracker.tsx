@@ -9,7 +9,8 @@ import {
   Flame, 
   Clock, 
   Activity,
-  Award
+  Award,
+  Edit2
 } from 'lucide-react';
 import { Chart as ChartJS, registerables, type ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -81,8 +82,10 @@ export const RunTracker: React.FC = () => {
   // Modais
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
+  const [editingBodyLogId, setEditingBodyLogId] = useState<string | null>(null);
 
   const handleOpenBodyModal = () => {
+    setEditingBodyLogId(null);
     const latest = bodyCompLogs.length > 0 ? bodyCompLogs[bodyCompLogs.length - 1] : null;
     setBodyForm({
       date: new Date().toISOString().split('T')[0],
@@ -100,6 +103,28 @@ export const RunTracker: React.FC = () => {
       visceralFatGoal: latest ? String(latest.visceralFatGoal) : '',
       metabolicAge: latest ? String(latest.metabolicAge) : '',
       heartRate: latest ? String(latest.heartRate) : ''
+    });
+    setIsBodyModalOpen(true);
+  };
+
+  const handleEditBody = (log: BodyCompLog) => {
+    setEditingBodyLogId(log.id);
+    setBodyForm({
+      date: log.date,
+      weight: String(log.weight),
+      idealWeight: String(log.idealWeight || ''),
+      bodyFat: String(log.bodyFat || ''),
+      bodyFatGoal: String(log.bodyFatGoal || ''),
+      muscleMass: String(log.muscleMass || ''),
+      muscleMassGoal: String(log.muscleMassGoal || ''),
+      bodyWater: String(log.bodyWater || ''),
+      boneMass: String(log.boneMass || ''),
+      basalMetabolism: String(log.basalMetabolism || ''),
+      proteins: String(log.proteins || ''),
+      visceralFat: String(log.visceralFat || ''),
+      visceralFatGoal: String(log.visceralFatGoal || ''),
+      metabolicAge: String(log.metabolicAge || ''),
+      heartRate: String(log.heartRate || '')
     });
     setIsBodyModalOpen(true);
   };
@@ -244,7 +269,7 @@ export const RunTracker: React.FC = () => {
       return;
     }
 
-    db.addBodyCompLog({
+    const payload = {
       date: bodyForm.date,
       weight,
       idealWeight: Number(bodyForm.idealWeight) || weight,
@@ -260,7 +285,16 @@ export const RunTracker: React.FC = () => {
       visceralFatGoal: Number(bodyForm.visceralFatGoal) || 5,
       metabolicAge: Number(bodyForm.metabolicAge) || 30,
       heartRate: Number(bodyForm.heartRate) || 60
-    });
+    };
+
+    if (editingBodyLogId) {
+      db.updateBodyCompLog(editingBodyLogId, payload);
+      setEditingBodyLogId(null);
+      alert('Medição de bioimpedância atualizada com sucesso!');
+    } else {
+      db.addBodyCompLog(payload);
+      alert('Nova medição de bioimpedância registrada com sucesso!');
+    }
 
     setIsBodyModalOpen(false);
     // Reinicia form
@@ -912,7 +946,7 @@ export const RunTracker: React.FC = () => {
                       <th>Visceral</th>
                       <th>Idade Metab.</th>
                       <th>FC Repouso</th>
-                      <th style={{ width: '50px' }}>Ações</th>
+                      <th style={{ width: '85px' }}>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -932,13 +966,22 @@ export const RunTracker: React.FC = () => {
                         <td>{log.metabolicAge} anos</td>
                         <td>{log.heartRate} bpm</td>
                         <td>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '0.25rem 0.4rem', color: '#ff6b6b' }}
-                            onClick={() => handleDeleteBody(log.id)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.25rem' }}>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '0.25rem 0.4rem', color: 'var(--accent-blue)' }}
+                              onClick={() => handleEditBody(log)}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '0.25rem 0.4rem', color: '#ff6b6b' }}
+                              onClick={() => handleDeleteBody(log.id)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1063,7 +1106,7 @@ export const RunTracker: React.FC = () => {
             <div className="modal-header">
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <TrendingUp size={20} color="var(--accent-purple)" />
-                Lançar Dados de Bioimpedância
+                {editingBodyLogId ? 'Editar Medição de Bioimpedância' : 'Lançar Dados de Bioimpedância'}
               </h3>
               <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsBodyModalOpen(false)}>X</button>
             </div>
