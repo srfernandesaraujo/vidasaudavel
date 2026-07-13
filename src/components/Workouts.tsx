@@ -169,7 +169,7 @@ const processImageForTransparency = (base64Str: string, maxSize: number = 800): 
 // Helper para extrair o ID de vídeo do YouTube e retornar o link de embed
 function getYouTubeEmbedUrl(url: string): string | null {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
   const match = url.match(regExp);
   if (match && match[2].length === 11) {
     const videoId = match[2];
