@@ -1005,7 +1005,7 @@ export const Workouts: React.FC = () => {
             </div>
             <form onSubmit={handleSaveExercise}>
               <div className="modal-body" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                {!editingExercise && exercises.length > 0 && (
+                {!editingExercise && (
                   <div className="form-group" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', marginBottom: '1.25rem' }}>
                     <label htmlFor="exCopier" style={{ fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>Copiar de um Exercício Existente?</label>
                     <select
@@ -1031,11 +1031,18 @@ export const Workouts: React.FC = () => {
                           }));
                         }
                       }}
+                      disabled={exercises.length === 0}
                     >
-                      <option value="">-- Selecione para preencher automaticamente --</option>
-                      {Array.from(new Map(exercises.map(ex => [ex.name, ex])).values()).map(ex => (
-                        <option key={ex.id} value={ex.id}>{ex.name} ({ex.muscleGroup})</option>
-                      ))}
+                      {exercises.length === 0 ? (
+                        <option value="">Nenhum exercício cadastrado no sistema para copiar</option>
+                      ) : (
+                        <>
+                          <option value="">-- Selecione para preencher automaticamente --</option>
+                          {Array.from(new Map(exercises.map(ex => [ex.name, ex])).values()).map(ex => (
+                            <option key={ex.id} value={ex.id}>{ex.name} ({ex.muscleGroup})</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
                 )}
