@@ -1005,6 +1005,41 @@ export const Workouts: React.FC = () => {
             </div>
             <form onSubmit={handleSaveExercise}>
               <div className="modal-body" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                {!editingExercise && exercises.length > 0 && (
+                  <div className="form-group" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', marginBottom: '1.25rem' }}>
+                    <label htmlFor="exCopier" style={{ fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>Copiar de um Exercício Existente?</label>
+                    <select
+                      id="exCopier"
+                      className="form-control"
+                      style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}
+                      value=""
+                      onChange={(e) => {
+                        const selectedEx = exercises.find(ex => ex.id === e.target.value);
+                        if (selectedEx) {
+                          setExerciseForm(prev => ({
+                            ...prev,
+                            name: selectedEx.name,
+                            muscleGroup: selectedEx.muscleGroup,
+                            series: selectedEx.series,
+                            repetitions: selectedEx.repetitions,
+                            prWeight: selectedEx.prWeight,
+                            notes: selectedEx.notes,
+                            executionType: selectedEx.executionType || 'reps',
+                            instructions: selectedEx.instructions || '',
+                            image: selectedEx.image || '',
+                            videoUrl: selectedEx.videoUrl || ''
+                          }));
+                        }
+                      }}
+                    >
+                      <option value="">-- Selecione para preencher automaticamente --</option>
+                      {Array.from(new Map(exercises.map(ex => [ex.name, ex])).values()).map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.name} ({ex.muscleGroup})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label htmlFor="exName">Nome do Exercício</label>
                   <input
