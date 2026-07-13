@@ -206,10 +206,12 @@ export const Workouts: React.FC = () => {
           if (logDateObj && !isNaN(logDateObj.getTime()) && logDateObj >= sevenDaysAgo) {
             log.exercises.forEach(ex => {
               if (ex && ex.muscleGroup) {
-                const group = normalizeMuscleName(ex.muscleGroup);
-                if (volume[group] !== undefined) {
-                  volume[group] += Number(ex.series) || 0;
-                }
+                const groups = ex.muscleGroup.split(',').map(m => normalizeMuscleName(m.trim())).filter(Boolean);
+                groups.forEach(group => {
+                  if (volume[group] !== undefined) {
+                    volume[group] += Number(ex.series) || 0;
+                  }
+                });
               }
             });
           }
@@ -766,7 +768,11 @@ export const Workouts: React.FC = () => {
                 const workoutExs = exercises.filter(e => e.workoutId === workout.id);
                 
                 // Calcula músculos trabalhados dinamicamente para o cabeçalho do card
-                const musclesUnique = Array.from(new Set(workoutExs.map(e => e.muscleGroup).filter(Boolean)));
+                const musclesUnique = Array.from(
+                  new Set(
+                    workoutExs.flatMap(e => e.muscleGroup ? e.muscleGroup.split(',').map(m => m.trim()) : []).filter(Boolean)
+                  )
+                );
                 const workedMuscles = musclesUnique.length === 0 
                   ? 'Sem exercícios' 
                   : musclesUnique.slice(0, 3).join(' • ') + (musclesUnique.length > 3 ? '...' : '');
@@ -850,9 +856,16 @@ export const Workouts: React.FC = () => {
                                   return (
                                     <tr key={ex.id}>
                                       <td>
-                                        <span className={`badge ${muscleGroupsList.slice(0, 8).includes(ex.muscleGroup) ? 'badge-superior' : 'badge-inferior'}`}>
-                                          {ex.muscleGroup}
-                                        </span>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                          {ex.muscleGroup.split(',').map(m => {
+                                            const trimmed = m.trim();
+                                            return (
+                                              <span key={trimmed} className={`badge ${muscleGroupsList.slice(0, 8).includes(trimmed) ? 'badge-superior' : 'badge-inferior'}`}>
+                                                {trimmed}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
                                       </td>
                                       <td style={{ fontWeight: 600 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -978,35 +991,61 @@ export const Workouts: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid-cols-2">
-                  <div className="form-group">
-                    <label htmlFor="exMuscle">Grupo Muscular</label>
-                    <select
-                      id="exMuscle"
-                      className="form-control"
-                      value={exerciseForm.muscleGroup}
-                      onChange={(e) => setExerciseForm({ ...exerciseForm, muscleGroup: e.target.value })}
-                    >
-                      {muscleGroupsList.map(g => (
-                        <option key={g} value={g}>{g}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label htmlFor="exWorkout">Treino Associado</label>
+                  <select
+                    id="exWorkout"
+                    className="form-control"
+                    value={exerciseForm.workoutId}
+                    onChange={(e) => setExerciseForm({ ...exerciseForm, workoutId: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>Escolha um treino...</option>
+                    {workouts.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div className="form-group">
-                    <label htmlFor="exWorkout">Treino Associado</label>
-                    <select
-                      id="exWorkout"
-                      className="form-control"
-                      value={exerciseForm.workoutId}
-                      onChange={(e) => setExerciseForm({ ...exerciseForm, workoutId: e.target.value })}
-                      required
-                    >
-                      <option value="" disabled>Escolha um treino...</option>
-                      {workouts.map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </select>
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Grupo(s) Muscular(es) (Selecione um ou mais)
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {muscleGroupsList.map(g => {
+                      const activeMuscles = exerciseForm.muscleGroup ? exerciseForm.muscleGroup.split(',').map(m => m.trim()) : [];
+                      const isActive = activeMuscles.includes(g);
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          className={`muscle-chip ${isActive ? 'active' : ''}`}
+                          style={{
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '99px',
+                            fontSize: '0.8rem',
+                            border: isActive ? '1px solid var(--accent-blue)' : '1px solid var(--border-subtle)',
+                            background: isActive ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                            color: isActive ? '#60a5fa' : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            fontWeight: isActive ? 600 : 400,
+                          }}
+                          onClick={() => {
+                            let newMuscles: string[];
+                            if (isActive) {
+                              newMuscles = activeMuscles.filter(m => m !== g);
+                              if (newMuscles.length === 0) newMuscles = [g];
+                            } else {
+                              newMuscles = [...activeMuscles, g];
+                            }
+                            setExerciseForm({ ...exerciseForm, muscleGroup: newMuscles.join(', ') });
+                          }}
+                        >
+                          {g}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1265,7 +1304,16 @@ export const Workouts: React.FC = () => {
             <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
               <div>
                 <h4 style={{ fontSize: '1.35rem', margin: '0 0 0.25rem 0', color: '#ffffff' }}>{selectedExerciseForView.name}</h4>
-                <span className="badge badge-superior" style={{ display: 'inline-block' }}>{selectedExerciseForView.muscleGroup}</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
+                  {selectedExerciseForView.muscleGroup.split(',').map(m => {
+                    const trimmed = m.trim();
+                    return (
+                      <span key={trimmed} className={`badge ${muscleGroupsList.slice(0, 8).includes(trimmed) ? 'badge-superior' : 'badge-inferior'}`}>
+                        {trimmed}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>

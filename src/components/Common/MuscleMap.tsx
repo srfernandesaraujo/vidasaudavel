@@ -137,19 +137,21 @@ export const MuscleMap: React.FC = () => {
         if (log && Array.isArray(log.exercises)) {
           log.exercises.forEach(ex => {
             if (ex && ex.muscleGroup) {
-              const group = normalizeMuscleName(ex.muscleGroup);
-              if (counts[group] !== undefined) {
-                counts[group] += 1;
-                if (log.date) {
-                  const parts = log.date.split('-');
-                  if (parts.length === 3) {
-                    const [year, month, day] = parts;
-                    lastDates[group] = `${day}/${month}/${year}`;
-                  } else {
-                    lastDates[group] = log.date;
+              const groups = ex.muscleGroup.split(',').map(g => normalizeMuscleName(g.trim())).filter(Boolean);
+              groups.forEach(group => {
+                if (counts[group] !== undefined) {
+                  counts[group] += 1;
+                  if (log.date) {
+                    const parts = log.date.split('-');
+                    if (parts.length === 3) {
+                      const [year, month, day] = parts;
+                      lastDates[group] = `${day}/${month}/${year}`;
+                    } else {
+                      lastDates[group] = log.date;
+                    }
                   }
                 }
-              }
+              });
             }
           });
         }
@@ -171,7 +173,11 @@ export const MuscleMap: React.FC = () => {
     try {
       const safeExercises = Array.isArray(exercises) ? exercises : [];
       muscleGroups.forEach(g => {
-        freqs[g.id] = safeExercises.filter(ex => ex && normalizeMuscleName(ex.muscleGroup) === g.id).length;
+        freqs[g.id] = safeExercises.filter(ex => {
+          if (!ex || !ex.muscleGroup) return false;
+          const groups = ex.muscleGroup.split(',').map(m => normalizeMuscleName(m.trim())).filter(Boolean);
+          return groups.includes(g.id);
+        }).length;
       });
     } catch (err) {
       console.error("Erro ao calcular frequências teóricas:", err);
