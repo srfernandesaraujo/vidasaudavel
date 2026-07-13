@@ -21,6 +21,45 @@ import './Styles/runtracker.css';
 // Registra módulos do Chart.js
 ChartJS.register(...registerables);
 
+const parseTrainingText = (text: string) => {
+  const lines = text.split('\n');
+  let title = '';
+  let warmUp = '';
+  let mainSet = '';
+  let coolDown = '';
+  let coachTip = '';
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('⚡') || trimmed.startsWith('📈') || trimmed.startsWith('🏃‍♂️') || trimmed.startsWith('🏆')) {
+      title = trimmed;
+    } else if (trimmed.toLowerCase().includes('aquecimento:')) {
+      warmUp = trimmed.replace(/^-\s*aquecimento:\s*/i, '').replace(/^aquecimento:\s*/i, '');
+    } else if (trimmed.toLowerCase().includes('parte principal:')) {
+      mainSet = trimmed.replace(/^-\s*parte principal:\s*/i, '').replace(/^parte principal:\s*/i, '');
+    } else if (trimmed.toLowerCase().includes('desaquecimento:')) {
+      coolDown = trimmed.replace(/^-\s*desaquecimento:\s*/i, '').replace(/^desaquecimento:\s*/i, '');
+    } else if (trimmed.toLowerCase().includes('dica do treinador:')) {
+      coachTip = trimmed.replace(/^-\s*dica do treinador:\s*/i, '').replace(/^dica do treinador:\s*/i, '');
+    }
+  });
+
+  // Se não bater no parser (ex: planos antigos ou gerados por IA de outra forma), retorna a string original formatada
+  if (!warmUp && !mainSet && !coolDown) {
+    return { isParsed: false, title: '', warmUp: '', mainSet: '', coolDown: '', coachTip: '', rawText: text };
+  }
+
+  return {
+    isParsed: true,
+    title,
+    warmUp,
+    mainSet,
+    coolDown,
+    coachTip,
+    rawText: text
+  };
+};
+
 export const RunTracker: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'runs' | 'bodycomp'>('runs');
   const [runLogs, setRunLogs] = useState<RunLog[]>(db.getRunLogs());
@@ -862,58 +901,194 @@ export const RunTracker: React.FC = () => {
 
                         {/* Dias de Treino da Semana */}
                         {isExpanded && (
-                          <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '0.5rem 0' }}>
-                            {week.days.map((day, dIdx) => (
-                              <div 
-                                key={dIdx} 
-                                className="flex-between"
-                                style={{ 
-                                  padding: '0.75rem 1.25rem', 
-                                  background: day.isRest ? 'rgba(0,0,0,0.08)' : (day.isDone ? 'rgba(16, 185, 129, 0.01)' : 'rgba(255,255,255,0.01)'),
-                                  borderBottom: dIdx < week.days.length - 1 ? '1px solid rgba(255,255,255,0.02)' : 'none',
-                                  opacity: day.isRest ? 0.7 : 1
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '200px' }}>
-                                  {!day.isRest ? (
-                                    <input 
-                                      type="checkbox"
-                                      style={{
-                                        width: '16px',
-                                        height: '16px',
-                                        cursor: 'pointer',
-                                        accentColor: '#10b981'
-                                      }}
-                                      checked={!!day.isDone}
-                                      onChange={(e) => handleToggleDayDone(week.weekNumber, day.dayName, e.target.checked)}
-                                    />
-                                  ) : (
-                                    <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.15rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Rest</span>
-                                  )}
-                                  <div style={{ textAlign: 'left', flex: 1 }}>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: day.isDone ? 'var(--text-muted)' : '#ffffff', textDecoration: day.isDone ? 'line-through' : 'none' }}>{day.dayName}</span>
-                                    <div style={{ fontSize: '0.8rem', color: day.isDone ? 'var(--text-muted)' : 'var(--text-secondary)', marginTop: '0.15rem', textDecoration: day.isDone ? 'line-through' : 'none', whiteSpace: 'pre-line' }}>{day.training}</div>
-                                    
-                                    {!day.isRest && (day.objective || day.successCriteria) && (
-                                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '0.4rem', opacity: day.isDone ? 0.6 : 1 }}>
-                                        {day.objective && (
-                                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                            <strong style={{ color: 'var(--accent-blue)' }}>🎯 Objetivo: </strong>
-                                            {day.objective}
-                                          </div>
-                                        )}
-                                        {day.successCriteria && (
-                                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                            <strong style={{ color: '#10b981' }}>✓ Critério de Sucesso: </strong>
-                                            {day.successCriteria}
-                                          </div>
-                                        )}
+                          <div style={{ 
+                            borderTop: '1px solid var(--border-subtle)', 
+                            padding: '1.25rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1.1rem',
+                            background: 'rgba(0, 0, 0, 0.12)'
+                          }}>
+                            {week.days.map((day, dIdx) => {
+                              if (day.isRest) {
+                                return (
+                                  <div 
+                                    key={dIdx}
+                                    style={{
+                                      padding: '0.85rem 1.25rem',
+                                      borderRadius: '10px',
+                                      background: 'rgba(255, 255, 255, 0.01)',
+                                      border: '1px dashed rgba(255, 255, 255, 0.08)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      opacity: 0.55
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                      <span style={{ fontSize: '1.15rem' }}>💤</span>
+                                      <div style={{ textAlign: 'left' }}>
+                                        <strong style={{ color: '#ffffff', fontSize: '0.85rem', fontWeight: 600 }}>{day.dayName}</strong>
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>Descanso Total ou Recuperação Muscular</span>
                                       </div>
-                                    )}
+                                    </div>
+                                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>Rest</span>
                                   </div>
+                                );
+                              }
+
+                              return (
+                                <div 
+                                  key={dIdx}
+                                  style={{
+                                    padding: '1.5rem',
+                                    borderRadius: '12px',
+                                    background: day.isDone ? 'rgba(16, 185, 129, 0.02)' : 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.005) 100%)',
+                                    border: day.isDone ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border-subtle)',
+                                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '1.1rem',
+                                    transition: 'all 0.3s ease',
+                                    opacity: day.isDone ? 0.75 : 1
+                                  }}
+                                >
+                                  {/* Cabeçalho do Card */}
+                                  <div className="flex-between" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)', paddingBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                                      <input 
+                                        type="checkbox"
+                                        style={{
+                                          width: '18px',
+                                          height: '18px',
+                                          cursor: 'pointer',
+                                          accentColor: '#10b981'
+                                        }}
+                                        checked={!!day.isDone}
+                                        onChange={(e) => handleToggleDayDone(week.weekNumber, day.dayName, e.target.checked)}
+                                      />
+                                      <span style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff' }}>{day.dayName}</span>
+                                    </div>
+                                    
+                                    {/* Badge do Tipo de Treino */}
+                                    {(() => {
+                                      let badgeColor = '#60a5fa';
+                                      let bg = 'rgba(59, 130, 246, 0.12)';
+                                      let label = 'Corrida';
+                                      
+                                      const textLower = day.training.toLowerCase();
+                                      if (textLower.includes('intervalado') || textLower.includes('tiros') || textLower.includes('velocidade')) {
+                                        badgeColor = '#f87171';
+                                        bg = 'rgba(248, 113, 113, 0.12)';
+                                        label = '⚡ Intervalado';
+                                      } else if (textLower.includes('ritmo') || textLower.includes('tempo run') || textLower.includes('limiar')) {
+                                        badgeColor = '#38bdf8';
+                                        bg = 'rgba(56, 189, 248, 0.12)';
+                                        label = '📈 Tempo Run';
+                                      } else if (textLower.includes('longo') || textLower.includes('longão') || textLower.includes('desafio final')) {
+                                        badgeColor = '#34d399';
+                                        bg = 'rgba(52, 211, 153, 0.12)';
+                                        label = '🏃‍♂️ Longão';
+                                      }
+                                      
+                                      return (
+                                        <span style={{ 
+                                          color: badgeColor, 
+                                          background: bg, 
+                                          padding: '0.3rem 0.65rem', 
+                                          borderRadius: '6px', 
+                                          fontSize: '0.72rem', 
+                                          fontWeight: 800,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.5px'
+                                        }}>
+                                          {label}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+
+                                  {/* Conteúdo do Treino Estruturado */}
+                                  {(() => {
+                                    const parsed = parseTrainingText(day.training);
+                                    if (!parsed.isParsed) {
+                                      return (
+                                        <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', whiteSpace: 'pre-line', lineHeight: '1.6', textAlign: 'left' }}>
+                                          {day.training}
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                                        {parsed.title && (
+                                          <h4 style={{ margin: '0 0 0.15rem 0', fontSize: '1rem', color: '#ffffff', fontWeight: 700, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                            {parsed.title}
+                                          </h4>
+                                        )}
+                                        
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                          {parsed.warmUp && (
+                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.02)', borderLeft: '3px solid #3b82f6', textAlign: 'left' }}>
+                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🧘‍♂️ Aquecimento Ativo</div>
+                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.warmUp}</div>
+                                            </div>
+                                          )}
+
+                                          {parsed.mainSet && (
+                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.02)', borderLeft: '3px solid #ec4899', textAlign: 'left' }}>
+                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f472b6', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>⚡ Trabalho Principal</div>
+                                              <div style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.5' }}>{parsed.mainSet}</div>
+                                            </div>
+                                          )}
+
+                                          {parsed.coolDown && (
+                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.02)', borderLeft: '3px solid #10b981', textAlign: 'left' }}>
+                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🌀 Volta à Calma</div>
+                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.coolDown}</div>
+                                            </div>
+                                          )}
+
+                                          {parsed.coachTip && (
+                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.02)', border: '1px dashed rgba(245, 158, 11, 0.15)', textAlign: 'left' }}>
+                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>💡 Dica do Coach</div>
+                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>"{parsed.coachTip}"</div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Objetivos e Critérios de Sucesso */}
+                                  {(day.objective || day.successCriteria) && (
+                                    <div style={{ 
+                                      display: 'grid', 
+                                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                                      gap: '1rem',
+                                      marginTop: '0.2rem',
+                                      background: 'rgba(0, 0, 0, 0.25)',
+                                      padding: '0.9rem 1.1rem',
+                                      borderRadius: '10px',
+                                      border: '1px solid rgba(255, 255, 255, 0.03)'
+                                    }}>
+                                      {day.objective && (
+                                        <div style={{ textAlign: 'left' }}>
+                                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🎯 Adaptação Fisiológica</span>
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.objective}</span>
+                                        </div>
+                                      )}
+                                      {day.successCriteria && (
+                                        <div style={{ textAlign: 'left' }}>
+                                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>✓ Critério de Sucesso</span>
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.successCriteria}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1618,7 +1793,7 @@ export const RunTracker: React.FC = () => {
             <form onSubmit={handleGeneratePlan}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
                 {isGeneratingPlan ? (
-                  <div style={{ padding: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+                  <div style={{ padding: '2.5rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
                     <div style={{ 
                       width: '40px', 
                       height: '40px', 
@@ -1628,56 +1803,130 @@ export const RunTracker: React.FC = () => {
                       animation: 'spin 1s linear infinite'
                     }} />
                     <div>
-                      <strong style={{ color: '#ffffff' }}>IA elaborando sua planilha...</strong>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Estruturando treinos progressivos de ritmo, tiros e longões.</p>
+                      <strong style={{ color: '#ffffff', fontSize: '1.05rem' }}>IA estruturando sua planilha...</strong>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Montando aquecimentos, tiros técnicos, longões e descansos.</p>
                     </div>
                   </div>
                 ) : (
                   <>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, lineHeight: '1.4' }}>
-                      Selecione suas metas esportivas abaixo para que nossa inteligência artificial estruture sua rotina.
+                      Selecione suas metas abaixo para o treinador de IA desenhar sua rotina e as zonas cardíacas objetivas.
                     </p>
                     
+                    {/* Seleção Distância Alvo por Cards */}
                     <div className="form-group">
-                      <label htmlFor="planDist">Distância Alvo (km)</label>
-                      <select 
-                        id="planDist" 
-                        className="form-control"
-                        value={planForm.targetDistance}
-                        onChange={(e) => setPlanForm({ ...planForm, targetDistance: e.target.value })}
-                      >
-                        <option value="5">5 km (Iniciante)</option>
-                        <option value="10">10 km (Intermediário)</option>
-                        <option value="15">15 km (Avançado)</option>
-                        <option value="21.1">Meia Maratona (21.1 km)</option>
-                        <option value="42.2">Maratona (42.2 km)</option>
-                      </select>
+                      <label style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.5rem', display: 'block' }}>Distância Alvo</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
+                        {[
+                          { value: '5', label: '5 km', desc: 'Iniciante / Sprint' },
+                          { value: '10', label: '10 km', desc: 'Intermediário' },
+                          { value: '15', label: '15 km', desc: 'Avançado' },
+                          { value: '21.1', label: '21.1 km', desc: 'Meia Maratona' },
+                          { value: '42.2', label: '42.2 km', desc: 'Maratona' }
+                        ].map(opt => {
+                          const isSelected = planForm.targetDistance === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setPlanForm({ ...planForm, targetDistance: opt.value })}
+                              style={{
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '8px',
+                                background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255,255,255,0.01)',
+                                border: isSelected ? '2px solid #3b82f6' : '1px solid var(--border-subtle)',
+                                color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.15)' : 'none'
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: isSelected ? '#60a5fa' : '#ffffff' }}>{opt.label}</div>
+                              <div style={{ fontSize: '0.72rem', marginTop: '0.1rem', opacity: 0.8 }}>{opt.desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
+                    {/* Seleção Prazo por Cards */}
                     <div className="form-group">
-                      <label htmlFor="planWeeks">Prazo de Treinamento (Semanas)</label>
-                      <select 
-                        id="planWeeks" 
-                        className="form-control"
-                        value={planForm.weeksCount}
-                        onChange={(e) => setPlanForm({ ...planForm, weeksCount: e.target.value })}
-                      >
-                        <option value="4">4 semanas (Intenso)</option>
-                        <option value="8">8 semanas (Ideal para 5k/10k)</option>
-                        <option value="12">12 semanas (Recomendado para 21k)</option>
-                        <option value="16">16 semanas (Preparo completo)</option>
-                      </select>
+                      <label style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.5rem', display: 'block' }}>Prazo de Preparação</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
+                        {[
+                          { value: '4', label: '4 Semanas', desc: 'Preparo Rápido' },
+                          { value: '8', label: '8 Semanas', desc: 'Tempo Ideal' },
+                          { value: '12', label: '12 Semanas', desc: 'Recomendado' },
+                          { value: '16', label: '16 Semanas', desc: 'Preparo Completo' }
+                        ].map(opt => {
+                          const isSelected = planForm.weeksCount === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setPlanForm({ ...planForm, weeksCount: opt.value })}
+                              style={{
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '8px',
+                                background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255,255,255,0.01)',
+                                border: isSelected ? '2px solid #8b5cf6' : '1px solid var(--border-subtle)',
+                                color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isSelected ? '0 0 10px rgba(139, 92, 246, 0.15)' : 'none'
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: isSelected ? '#c084fc' : '#ffffff' }}>{opt.label}</div>
+                              <div style={{ fontSize: '0.72rem', marginTop: '0.1rem', opacity: 0.8 }}>{opt.desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0 0.5rem 0' }}>
-                      <input 
-                        type="checkbox"
-                        id="planWearable" 
-                        checked={planForm.hasWearable}
-                        onChange={(e) => setPlanForm({ ...planForm, hasWearable: e.target.checked })}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                      <label htmlFor="planWearable" style={{ margin: 0, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>Possuo Smartwatch / Wearable para medir FC</label>
+                    {/* Toggle Customizado para Smartwatch */}
+                    <div style={{ 
+                      background: 'rgba(255,255,255,0.01)', 
+                      border: '1px solid var(--border-subtle)', 
+                      padding: '0.85rem 1rem', 
+                      borderRadius: '8px', 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      margin: '0.25rem 0' 
+                    }}>
+                      <div style={{ textAlign: 'left' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', display: 'block' }}>Smartwatch / Wearable</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Possui monitor cardíaco?</span>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => setPlanForm({ ...planForm, hasWearable: !planForm.hasWearable })}
+                        style={{
+                          width: '42px',
+                          height: '22px',
+                          borderRadius: '99px',
+                          background: planForm.hasWearable ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          position: 'relative',
+                          cursor: 'pointer',
+                          transition: 'background 0.3s ease'
+                        }}
+                      >
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '50%',
+                          background: '#ffffff',
+                          position: 'absolute',
+                          top: '3px',
+                          left: planForm.hasWearable ? '23px' : '3px',
+                          transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                        }} />
+                      </button>
                     </div>
 
                     {planForm.hasWearable && (
@@ -1696,7 +1945,7 @@ export const RunTracker: React.FC = () => {
                     )}
 
                     <div className="form-group">
-                      <label htmlFor="planRefPace">Pace de Referência (seu ritmo médio para 5km - MM:SS)</label>
+                      <label htmlFor="planRefPace">Pace de Referência (ritmo para 5km - MM:SS)</label>
                       <input
                         id="planRefPace"
                         type="text"
