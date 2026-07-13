@@ -20,6 +20,7 @@ export interface Exercise {
   executionType?: 'reps' | 'time';
   instructions?: string;
   image?: string;
+  videoUrl?: string;
 }
 
 export interface Workout {

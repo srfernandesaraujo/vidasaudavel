@@ -166,6 +166,18 @@ const processImageForTransparency = (base64Str: string, maxSize: number = 800): 
   });
 };
 
+// Helper para extrair o ID de vídeo do YouTube e retornar o link de embed
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    const videoId = match[2];
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+  return null;
+}
+
 export const Workouts: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'workouts' | 'musclemap'>('workouts');
   const [workouts, setWorkouts] = useState<Workout[]>(db.getWorkouts());
@@ -241,7 +253,8 @@ export const Workouts: React.FC = () => {
     notes: '',
     executionType: 'reps',
     instructions: '',
-    image: ''
+    image: '',
+    videoUrl: ''
   });
 
   // Controle de colapsáveis (Cardio e Observações)
@@ -357,7 +370,8 @@ export const Workouts: React.FC = () => {
       notes: '',
       executionType: 'reps',
       instructions: '',
-      image: ''
+      image: '',
+      videoUrl: ''
     });
     setIsExerciseModalOpen(true);
   };
@@ -374,7 +388,8 @@ export const Workouts: React.FC = () => {
       notes: exercise.notes,
       executionType: exercise.executionType || 'reps',
       instructions: exercise.instructions || '',
-      image: exercise.image || ''
+      image: exercise.image || '',
+      videoUrl: exercise.videoUrl || ''
     });
     setIsExerciseModalOpen(true);
   };
@@ -394,7 +409,8 @@ export const Workouts: React.FC = () => {
       notes: exerciseForm.notes,
       executionType: exerciseForm.executionType as 'reps' | 'time',
       instructions: exerciseForm.instructions,
-      image: exerciseForm.image
+      image: exerciseForm.image,
+      videoUrl: exerciseForm.videoUrl
     });
 
     setIsExerciseModalOpen(false);
@@ -877,8 +893,8 @@ export const Workouts: React.FC = () => {
                                           >
                                             {ex.name}
                                           </button>
-                                          {(ex.instructions || ex.image) && (
-                                            <span style={{ display: 'inline-flex', cursor: 'pointer' }} onClick={() => setSelectedExerciseForView(ex)} title="Possui guia de execução">
+                                          {(ex.instructions || ex.image || ex.videoUrl) && (
+                                            <span style={{ display: 'inline-flex', cursor: 'pointer' }} onClick={() => setSelectedExerciseForView(ex)} title={ex.videoUrl ? "Possui vídeo demonstrativo" : "Possui guia de execução"}>
                                               <Eye size={12} color="#3b82f6" />
                                             </span>
                                           )}
@@ -1160,6 +1176,18 @@ export const Workouts: React.FC = () => {
                 </div>
 
                 <div className="form-group">
+                  <label htmlFor="exVideoUrl">Link do Vídeo Demonstrativo (YouTube)</label>
+                  <input
+                    id="exVideoUrl"
+                    type="url"
+                    className="form-control"
+                    placeholder="Ex: https://www.youtube.com/watch?v=s8Yy1J6XGis"
+                    value={exerciseForm.videoUrl}
+                    onChange={(e) => setExerciseForm({ ...exerciseForm, videoUrl: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="exNotes">Observações Adicionais</label>
                   <textarea
                     id="exNotes"
@@ -1349,6 +1377,28 @@ export const Workouts: React.FC = () => {
                     style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '8px' }} 
                   />
                 </div>
+              )}
+
+              {selectedExerciseForView.videoUrl && (
+                (() => {
+                  const embedUrl = getYouTubeEmbedUrl(selectedExerciseForView.videoUrl);
+                  if (!embedUrl) return null;
+                  return (
+                    <div>
+                      <h5 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 0.5rem 0', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.25rem' }}>Vídeo Demonstrativo</h5>
+                      <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0, borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                        <iframe
+                          src={embedUrl}
+                          title={`Vídeo demonstrativo de ${selectedExerciseForView.name}`}
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()
               )}
 
               {selectedExerciseForView.notes && !selectedExerciseForView.instructions && (
