@@ -34,6 +34,8 @@ export interface RunningPlanWeekDay {
   training: string;
   isRest: boolean;
   isDone?: boolean;
+  objective?: string;
+  successCriteria?: string;
 }
 
 export interface RunningPlanWeek {
@@ -47,6 +49,9 @@ export interface RunningPlan {
   weeksCount: number;
   createdAt: string;
   weeks: RunningPlanWeek[];
+  hasWearable?: boolean;
+  maxHeartRate?: number;
+  referencePace?: string;
 }
 
 export interface WorkoutLogExercise {

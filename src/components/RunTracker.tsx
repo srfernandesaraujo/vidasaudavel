@@ -91,7 +91,10 @@ export const RunTracker: React.FC = () => {
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planForm, setPlanForm] = useState({
     targetDistance: '5',
-    weeksCount: '4'
+    weeksCount: '4',
+    hasWearable: false,
+    maxHeartRate: '190',
+    referencePace: '06:00'
   });
   const [expandedWeeks, setExpandedWeeks] = useState<Record<number, boolean>>({ 1: true });
 
@@ -99,7 +102,13 @@ export const RunTracker: React.FC = () => {
     e.preventDefault();
     setIsGeneratingPlan(true);
     try {
-      const plan = await generateRunningPlan(Number(planForm.targetDistance), Number(planForm.weeksCount));
+      const plan = await generateRunningPlan(
+        Number(planForm.targetDistance), 
+        Number(planForm.weeksCount),
+        planForm.hasWearable,
+        Number(planForm.maxHeartRate),
+        planForm.referencePace
+      );
       db.saveRunningPlan(plan);
       setRunningPlan(plan);
       setIsPlanModalOpen(false);
@@ -881,9 +890,26 @@ export const RunTracker: React.FC = () => {
                                   ) : (
                                     <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.15rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Rest</span>
                                   )}
-                                  <div style={{ textAlign: 'left' }}>
+                                  <div style={{ textAlign: 'left', flex: 1 }}>
                                     <span style={{ fontSize: '0.85rem', fontWeight: 600, color: day.isDone ? 'var(--text-muted)' : '#ffffff', textDecoration: day.isDone ? 'line-through' : 'none' }}>{day.dayName}</span>
-                                    <div style={{ fontSize: '0.8rem', color: day.isDone ? 'var(--text-muted)' : 'var(--text-secondary)', marginTop: '0.15rem', textDecoration: day.isDone ? 'line-through' : 'none' }}>{day.training}</div>
+                                    <div style={{ fontSize: '0.8rem', color: day.isDone ? 'var(--text-muted)' : 'var(--text-secondary)', marginTop: '0.15rem', textDecoration: day.isDone ? 'line-through' : 'none', whiteSpace: 'pre-line' }}>{day.training}</div>
+                                    
+                                    {!day.isRest && (day.objective || day.successCriteria) && (
+                                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '0.4rem', opacity: day.isDone ? 0.6 : 1 }}>
+                                        {day.objective && (
+                                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                            <strong style={{ color: 'var(--accent-blue)' }}>🎯 Objetivo: </strong>
+                                            {day.objective}
+                                          </div>
+                                        )}
+                                        {day.successCriteria && (
+                                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                            <strong style={{ color: '#10b981' }}>✓ Critério de Sucesso: </strong>
+                                            {day.successCriteria}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1641,6 +1667,47 @@ export const RunTracker: React.FC = () => {
                         <option value="12">12 semanas (Recomendado para 21k)</option>
                         <option value="16">16 semanas (Preparo completo)</option>
                       </select>
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0 0.5rem 0' }}>
+                      <input 
+                        type="checkbox"
+                        id="planWearable" 
+                        checked={planForm.hasWearable}
+                        onChange={(e) => setPlanForm({ ...planForm, hasWearable: e.target.checked })}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <label htmlFor="planWearable" style={{ margin: 0, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>Possuo Smartwatch / Wearable para medir FC</label>
+                    </div>
+
+                    {planForm.hasWearable && (
+                      <div className="form-group">
+                        <label htmlFor="planFC">Frequência Cardíaca Máxima (FCM em bpm)</label>
+                        <input
+                          id="planFC"
+                          type="number"
+                          className="form-control"
+                          placeholder="Ex: 190 (220 - sua idade caso não saiba)"
+                          value={planForm.maxHeartRate}
+                          onChange={(e) => setPlanForm({ ...planForm, maxHeartRate: e.target.value })}
+                          required
+                        />
+                      </div>
+                    )}
+
+                    <div className="form-group">
+                      <label htmlFor="planRefPace">Pace de Referência (seu ritmo médio para 5km - MM:SS)</label>
+                      <input
+                        id="planRefPace"
+                        type="text"
+                        className="form-control"
+                        placeholder="Ex: 06:00"
+                        value={planForm.referencePace}
+                        onChange={(e) => setPlanForm({ ...planForm, referencePace: e.target.value })}
+                        required
+                        pattern="^[0-9]{2}:[0-9]{2}$"
+                        title="Formato de Pace deve ser MM:SS (ex: 05:45 ou 06:00)"
+                      />
                     </div>
                   </>
                 )}
