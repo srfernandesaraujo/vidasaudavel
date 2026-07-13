@@ -662,6 +662,29 @@ function generateLocalRunningPlan(targetDistance: number, weeksCount: number): R
     { name: 'Domingo', isWorkout: false },
   ];
 
+  // Paces estimados com base na distância alvo
+  let targetPace = '6:00';
+  let recoveryPace = '7:00';
+  let speedPace = '5:00';
+  
+  if (targetDistance <= 5) {
+    targetPace = '5:45 min/km';
+    recoveryPace = '6:45 min/km';
+    speedPace = '4:50 min/km';
+  } else if (targetDistance <= 10) {
+    targetPace = '6:00 min/km';
+    recoveryPace = '7:00 min/km';
+    speedPace = '5:10 min/km';
+  } else if (targetDistance <= 21.1) {
+    targetPace = '6:15 min/km';
+    recoveryPace = '7:15 min/km';
+    speedPace = '5:30 min/km';
+  } else {
+    targetPace = '6:30 min/km';
+    recoveryPace = '7:30 min/km';
+    speedPace = '5:50 min/km';
+  }
+
   for (let w = 1; w <= weeksCount; w++) {
     const weekDays: any[] = [];
     
@@ -672,7 +695,7 @@ function generateLocalRunningPlan(targetDistance: number, weeksCount: number): R
     const midDistance = Number((longDistance * 0.6).toFixed(1));
 
     daysOfWeek.forEach(day => {
-      let training = 'Descanso Ativo / Recuperação';
+      let training = 'Descanso Total ou Regenerativo Ativo (Alongamento leve, liberação miofascial e caminhada de no máximo 20 min).';
       let isRest = true;
 
       if (day.isWorkout) {
@@ -681,23 +704,47 @@ function generateLocalRunningPlan(targetDistance: number, weeksCount: number): R
           // Treino de tiros ou técnico
           if (targetDistance <= 5) {
             const numTuros = 4 + w;
-            training = `Treino Intervalado: 10 min de aquecimento + ${numTuros}x tiros de 200m em ritmo forte (90% esforço) com 1:30 min de caminhada lenta para descansar + 5 min de desaquecimento.`;
+            training = `⚡ [TREINO INTERVALADO DE VELOCIDADE]\n` +
+                       `- Aquecimento: 10 min de corrida muito leve (Zona 1 cardíaca) + mobilidade dinâmica (elevação de joelhos, chutes frontais) + 3 acelerações progressivas de 50 metros.\n` +
+                       `- Parte Principal: ${numTuros}x Tiros de 200 metros em ritmo de velocidade (Pace alvo: ${speedPace}, RPE 8-9) com recuperação de 1:30 min caminhando entre cada tiro.\n` +
+                       `- Desaquecimento: 5 min de trote super leve para normalizar a frequência cardíaca.\n` +
+                       `- Dica do Treinador: Mantenha os ombros relaxados e a amplitude de braços coordenada nos tiros rápidos. O foco é a eficiência neuromuscular!`;
           } else if (targetDistance <= 10) {
             const numTuros = 3 + w;
-            training = `Treino de Tiros: 10 min de aquecimento + ${numTuros}x tiros de 400m em ritmo rápido (85% esforço) com 2:00 min de caminhada de descanso + 5 min de desaquecimento.`;
+            training = `⚡ [INTERVALADO / TIROS DE VELOCIDADE]\n` +
+                       `- Aquecimento: 12 min trote regenerativo (Zona 1) + 4x exercícios educativos de corrida (Skipping, Anfersen) + mobilidade articular.\n` +
+                       `- Parte Principal: ${numTuros}x Tiros de 400 metros em ritmo forte (Pace alvo: ${speedPace}, RPE 8) com recuperação de 2:00 min de caminhada lenta para reduzir o lactato.\n` +
+                       `- Desaquecimento: 5 min trote regenerativo final.\n` +
+                       `- Dica do Treinador: Concentre-se em expirar todo o ar dos pulmões de forma controlada nos tiros de 400m para evitar a dor lateral desnecessária (dor de desviado).`;
           } else {
             const numTuros = 2 + Math.floor(w / 2);
-            training = `Treino de Ritmo/Tiros: 10 min de aquecimento + ${numTuros}x repetições de 800m no ritmo alvo de prova com 2:30 min de caminhada de descanso + 5 min de desaquecimento.`;
+            training = `⚡ [INTERVALADO DE LIMIAR DE LACTATO]\n` +
+                       `- Aquecimento: 15 min de corrida leve (Zona 2) + mobilidade ativa de quadril e ativação de glúteos com mini-band se disponível.\n` +
+                       `- Parte Principal: ${numTuros}x Tiros de 800 metros no seu ritmo de limiar aeróbico (Pace alvo: ${speedPace}, RPE 8) com 2:30 min de caminhada lenta de repouso.\n` +
+                       `- Desaquecimento: 6 min trote leve de volta à calma.\n` +
+                       `- Dica do Treinador: A cadência deve ser o foco. Tente manter entre 170-180 passos por minuto. A passos rápidos e curtos reduzem a frenagem e economizam energia.`;
           }
         } else if (day.name === 'Quarta-feira') {
           // Treino de ritmo contínuo
-          training = `Corrida de Ritmo (Tempo Run): 5 min aquecimento + ${midDistance} km em ritmo constante e confortável (Zona 3 cardíaca) + 5 min desaquecimento.`;
+          training = `📈 [CORRIDA DE RITMO / TEMPO RUN]\n` +
+                     `- Aquecimento: 8 min de caminhada rápida evoluindo para trote leve + rotações circulares de tornozelo.\n` +
+                     `- Parte Principal: Corrida contínua de ${midDistance} km em ritmo firme de prova (Zona 3 cardíaca, Pace alvo: ${targetPace}, RPE 6-7). Mantenha a consistência sem oscilar a velocidade.\n` +
+                     `- Desaquecimento: 5 min de trote super leve.\n` +
+                     `- Dica do Treinador: Este é um treino mental. Encontre seu ritmo confortável-desconfortável e controle a respiração em uma proporção de 3 passos inspirando e 3 passos expirando.`;
         } else if (day.name === 'Sábado') {
           // Longão progressivo
           if (w === weeksCount) {
-            training = `🏆 DESAFIO FINAL: Corra os ${targetDistance} km no seu ritmo alvo! Concentre-se na respiração e hidratação. Você se preparou para este dia!`;
+            training = `🏆 [DESAFIO FINAL: CONQUISTA DO OBJETIVO]\n` +
+                       `- Aquecimento: 10 min de corrida muito leve + mobilidade leve. Nada de fadiga antes de começar!\n` +
+                       `- Parte Principal: CORRA OS ${targetDistance} km no seu Pace de prova/alvo (Pace ideal: ${targetPace}, RPE 7-8). Divida mentalmente a prova em 3 partes iguais e controle a ansiedade no início.\n` +
+                       `- Desaquecimento: Caminhada lenta e alongamento estático leve.\n` +
+                       `- Dica do Treinador: Você completou toda a planilha e seu corpo está 100% pronto. Hidrate-se a cada 2 km e celebre cada quilômetro completado. O dia é seu!`;
           } else {
-            training = `Treino Longo (Longão): Corrida contínua de ${longDistance} km em ritmo leve/moderado (Zona 2 cardíaca para construir base aeróbica).`;
+            training = `🏃‍♂️ [TREINO LONGO / LONGÃO PROGRESSIVO]\n` +
+                       `- Aquecimento: 10 min trote muito leve + ativação de abdômen/core (prancha por 1 min).\n` +
+                       `- Parte Principal: Corrida contínua de ${longDistance} km em ritmo aeróbico base (Zona 2 cardíaca, Pace alvo: ${recoveryPace}, RPE 5-6). Aumente levemente o ritmo nos últimos 1 km se estiver confortável.\n` +
+                       `- Desaquecimento: 5 min caminhada lenta final.\n` +
+                       `- Dica do Treinador: O longão serve para construir sua base mitocondrial e resistência de tendões. Não corra rápido demais; você deve ser capaz de manter uma conversa sem perder o fôlego.`;
           }
         }
       }
@@ -728,9 +775,11 @@ function generateLocalRunningPlan(targetDistance: number, weeksCount: number): R
 export async function generateRunningPlan(targetDistance: number, weeksCount: number): Promise<RunningPlan> {
   const settings = db.getSettings();
 
-  const prompt = `Você é um Treinador Olímpico de Corrida de Rua. Gere uma planilha de treinos de corrida personalizada em formato JSON para um atleta que tem como objetivo correr a distância de ${targetDistance} km no prazo de ${weeksCount} semanas.
+  const prompt = `Você é um Treinador de Elite de Corrida de Rua, mentor de atletas olímpicos e amadores de alta performance em assessorias renomadas internacionalmente.
   
-  Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto adicional:
+  Gere uma planilha de treinos de corrida personalizada e profissional em formato JSON para um atleta que tem como objetivo correr a distância de ${targetDistance} km no prazo de ${weeksCount} semanas.
+  
+  Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto de introdução/conclusão:
   {
     "id": "plan-${Date.now()}",
     "targetDistance": ${targetDistance},
@@ -740,22 +789,31 @@ export async function generateRunningPlan(targetDistance: number, weeksCount: nu
       {
         "weekNumber": 1,
         "days": [
-          { "dayName": "Segunda-feira", "training": "Descrição detalhada do treino em português (ex: tiros ou caminhada + corrida leve)", "isRest": false, "isDone": false },
+          { "dayName": "Segunda-feira", "training": "Descrição detalhada", "isRest": false, "isDone": false },
           { "dayName": "Terça-feira", "training": "Descanso", "isRest": true, "isDone": false },
-          { "dayName": "Quarta-feira", "training": "Descrição detalhada do treino", "isRest": false, "isDone": false },
+          { "dayName": "Quarta-feira", "training": "Descrição detalhada", "isRest": false, "isDone": false },
           { "dayName": "Quinta-feira", "training": "Descanso", "isRest": true, "isDone": false },
           { "dayName": "Sexta-feira", "training": "Descanso", "isRest": true, "isDone": false },
-          { "dayName": "Sábado", "training": "Descrição detalhada do treino longo (longão)", "isRest": false, "isDone": false },
+          { "dayName": "Sábado", "training": "Descrição detalhada", "isRest": false, "isDone": false },
           { "dayName": "Domingo", "training": "Descanso", "isRest": true, "isDone": false }
         ]
       }
     ]
   }
   
-  Diretrizes Técnicas da Planilha:
-  1. Crie um planejamento progressivo coerente com a ciência da educação física. A planilha deve conter 3 dias de treino por semana (Segunda-feira, Quarta-feira e Sábado) e os outros dias marcados como descanso ("isRest": true, "training": "Descanso").
-  2. A cada semana o volume total e a distância do longão de sábado devem aumentar de forma linear e segura, culminando com o "Desafio Final" de correr os ${targetDistance} km no sábado da última semana.
-  3. Formate as descrições em português brasileiro (pt-BR).`;
+  Diretrizes de Sofisticação dos Treinos (Apenas para dias ativos, onde "isRest" é false):
+  Para cada treino, você DEVE estruturar o texto do campo "training" exatamente com este padrão profissional:
+  
+  ⚡ [NOME DO TIPO DE TREINO: ex: INTERVALADO DE VELOCIDADE / FARTLEK / TEMPO RUN / LONGÃO PROGRESSIVO]
+  - Aquecimento: Instrução detalhada de preparação, ex: corrida muito leve, mobilidade articular, exercícios educativos de corrida (Skipping, Anfersen).
+  - Parte Principal: Instrução exata de distâncias, paces sugeridos baseados na meta do atleta, zonas de esforço cardíaco (ex: Zona 2, Zona 3, Zona 4), percepção de esforço (RPE 1-10) e número exato de repetições e tempo de descanso.
+  - Desaquecimento: Trote regenerativo ou caminhada lenta de volta à calma.
+  - Dica do Treinador: Um conselho especializado de postura (ex: cadência de passadas, relaxamento de braços), hidratação, estratégia de ritmo ou preparação mental.
+  
+  Diretrizes de Estrutura Semanal:
+  1. Crie um planejamento de 3 dias de treino ativos por semana (Segunda-feira, Quarta-feira e Sábado) e os outros dias marcados como descanso ("isRest": true, "training": "Descanso Total ou Regenerativo Ativo").
+  2. A cada semana, a distância e a intensidade do longão de sábado devem progredir de forma linear e segura, atingindo o ápice na última semana com o "Desafio Final" de correr a distância alvo de ${targetDistance} km no sábado.
+  3. Formate todo o conteúdo em português brasileiro (pt-BR).`;
 
   // Se houver chave e provedor válido, faz a chamada
   if (settings.apiKey && settings.apiProvider !== 'none') {
