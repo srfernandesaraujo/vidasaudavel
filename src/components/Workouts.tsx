@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db, type Exercise, type Workout, type WorkoutLog } from '../utils/db';
 import { MuscleMap, normalizeMuscleName } from './Common/MuscleMap';
 import { 
@@ -77,6 +77,94 @@ class SafeMuscleMap extends React.Component<any, { hasError: boolean }> {
     return <MuscleMap {...this.props} />;
   }
 }
+
+const processImageForTransparency = (base64Str: string, maxSize: number = 800): Promise<string> => {
+  return new Promise((resolve) => {
+    if (!base64Str || !base64Str.startsWith('data:image')) {
+      resolve(base64Str);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxSize) {
+          height *= maxSize / width;
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width *= maxSize / height;
+          height = maxSize;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      // Amostra a cor de fundo nos 4 cantos
+      const getPixelColor = (x: number, y: number) => {
+        const idx = (y * width + x) * 4;
+        return { r: data[idx], g: data[idx+1], b: data[idx+2] };
+      };
+
+      const corners = [
+        getPixelColor(0, 0),
+        getPixelColor(width - 1, 0),
+        getPixelColor(0, height - 1),
+        getPixelColor(width - 1, height - 1)
+      ];
+
+      // Média aritmética das cores dos cantos
+      let bgR = 0, bgG = 0, bgB = 0;
+      corners.forEach(c => {
+        bgR += c.r;
+        bgG += c.g;
+        bgB += c.b;
+      });
+      bgR = Math.round(bgR / 4);
+      bgG = Math.round(bgG / 4);
+      bgB = Math.round(bgB / 4);
+
+      // Limiar do Chroma-keying (35 é ideal para fundo escuro, suporta também fundo branco)
+      const threshold = 35;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+
+        const dist = Math.sqrt((r - bgR)**2 + (g - bgG)**2 + (b - bgB)**2);
+
+        if (dist < threshold) {
+          // Suavização das bordas com canal alfa progressivo
+          const alpha = Math.round((dist / threshold) * 255);
+          data[i+3] = dist < (threshold * 0.5) ? 0 : alpha;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+    img.src = base64Str;
+  });
+};
 
 export const Workouts: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'workouts' | 'musclemap'>('workouts');
@@ -179,6 +267,35 @@ export const Workouts: React.FC = () => {
     setExercises(db.getExercises());
     setLogs(db.getWorkoutLogs());
   };
+
+  // Migração automática de imagens existentes para PNG transparente de alta resolução
+  useEffect(() => {
+    const migrateImages = async () => {
+      const allExercises = db.getExercises();
+      let updatedAny = false;
+
+      for (const ex of allExercises) {
+        if (ex.image && (ex.image.includes('image/jpeg') || !ex.image.includes('image/png'))) {
+          try {
+            const transparentImage = await processImageForTransparency(ex.image, 800);
+            db.saveExercise({
+              ...ex,
+              image: transparentImage
+            });
+            updatedAny = true;
+          } catch (err) {
+            console.error('Erro ao converter imagem do exercício:', ex.name, err);
+          }
+        }
+      }
+
+      if (updatedAny) {
+        setExercises(db.getExercises());
+      }
+    };
+
+    migrateImages();
+  }, []);
 
   // Mapeamento dinâmico de dias sugeridos para exibição premium
   const getSuggestedDay = (workoutName: string, index: number) => {
@@ -287,36 +404,16 @@ export const Workouts: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const max_size = 400; // Limita a largura/altura para compactar na memória
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > max_size) {
-              height *= max_size / width;
-              width = max_size;
-            }
-          } else {
-            if (height > max_size) {
-              width *= max_size / height;
-              height = max_size;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); // 60% qualidade JPEG
-            setExerciseForm(prev => ({ ...prev, image: compressedBase64 }));
-          }
-        };
-        img.src = event.target?.result as string;
+      reader.onload = async (event) => {
+        const base64Src = event.target?.result as string;
+        try {
+          // Processa a imagem para deixá-la transparente e em alta resolução (máx 800px)
+          const transparentPng = await processImageForTransparency(base64Src, 800);
+          setExerciseForm(prev => ({ ...prev, image: transparentPng }));
+        } catch (err) {
+          console.error('Erro ao processar imagem:', err);
+          setExerciseForm(prev => ({ ...prev, image: base64Src }));
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -1009,7 +1106,7 @@ export const Workouts: React.FC = () => {
                       <img 
                         src={exerciseForm.image} 
                         alt="Preview" 
-                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-subtle)' }} 
+                        style={{ width: '80px', height: '80px', objectFit: 'contain', borderRadius: '4px' }} 
                       />
                       <button 
                         type="button" 
@@ -1201,7 +1298,7 @@ export const Workouts: React.FC = () => {
                   <img 
                     src={selectedExerciseForView.image} 
                     alt={`Guia de execução para ${selectedExerciseForView.name}`}
-                    style={{ width: '100%', maxHeight: '250px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)' }} 
+                    style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '8px' }} 
                   />
                 </div>
               )}
