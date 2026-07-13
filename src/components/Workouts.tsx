@@ -448,22 +448,26 @@ export const Workouts: React.FC = () => {
   // HANDLERS DE HISTÓRICO / REGISTRO
   // -------------------------------------------------------------
   const [logRpes, setLogRpes] = useState<Record<string, number>>({});
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<Record<string, boolean>>({});
 
   const openLogWorkoutModal = (workout: Workout, e: React.MouseEvent) => {
     e.stopPropagation(); // Evita expandir o card
     setSelectedWorkoutForLog(workout);
     setLogDate(new Date().toISOString().split('T')[0]);
     
-    // Inicializa cargas e RPEs
+    // Inicializa cargas, RPEs e exercícios concluídos
     const workoutExs = exercises.filter(ex => ex.workoutId === workout.id);
     const initialWeights: Record<string, number> = {};
     const initialRpes: Record<string, number> = {};
+    const initialCompleted: Record<string, boolean> = {};
     workoutExs.forEach(ex => {
       initialWeights[ex.id] = ex.prWeight || 0;
       initialRpes[ex.id] = 8; // RPE padrão = 8
+      initialCompleted[ex.id] = true; // Por padrão, todos começam como marcados (realizados)
     });
     setLogWeights(initialWeights);
     setLogRpes(initialRpes);
+    setCompletedExerciseIds(initialCompleted);
     setIsLogModalOpen(true);
   };
 
@@ -472,7 +476,14 @@ export const Workouts: React.FC = () => {
     if (!selectedWorkoutForLog) return;
 
     const workoutExs = exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id);
-    const loggedExercises = workoutExs.map(ex => ({
+    const activeWorkoutExs = workoutExs.filter(ex => completedExerciseIds[ex.id]);
+
+    if (activeWorkoutExs.length === 0) {
+      alert("Selecione pelo menos um exercício realizado para registrar o treino!");
+      return;
+    }
+
+    const loggedExercises = activeWorkoutExs.map(ex => ({
       name: ex.name,
       muscleGroup: ex.muscleGroup,
       series: ex.series,
@@ -488,9 +499,9 @@ export const Workouts: React.FC = () => {
       exercises: loggedExercises
     });
 
-    // Atualiza os PRs locais se a carga anotada for maior que o PR anterior e monitora se houve recorde
+    // Atualiza os PRs locais apenas dos exercícios efetivamente executados se a carga anotada for maior que o PR anterior
     let isNewPR = false;
-    workoutExs.forEach(ex => {
+    activeWorkoutExs.forEach(ex => {
       const weightLogged = logWeights[ex.id] || 0;
       if (weightLogged > ex.prWeight) {
         isNewPR = true;
@@ -1234,50 +1245,85 @@ export const Workouts: React.FC = () => {
                 
                 <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Anote as Cargas Concluídas (kg)</h4>
                 
-                {exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id).map(ex => (
-                  <div key={ex.id} className="flex-between" style={{ background: 'rgba(0,0,0,0.15)', padding: '0.65rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '0.75rem' }}>
-                    <div style={{ textAlign: 'left', flex: 1, minWidth: '150px' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{ex.name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR: {ex.prWeight > 0 ? `${ex.prWeight}kg` : 'Nenhum'}</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Peso (kg)</span>
-                        <input 
-                          type="number" 
-                          min="0"
-                          className="form-control" 
-                          style={{ width: '80px', height: '36px', textAlign: 'center', padding: '0.25rem' }}
-                          value={logWeights[ex.id] || ''}
-                          onChange={(e) => setLogWeights({
-                            ...logWeights,
-                            [ex.id]: Number(e.target.value)
+                {exercises.filter(ex => ex.workoutId === selectedWorkoutForLog.id).map(ex => {
+                  const isCompleted = !!completedExerciseIds[ex.id];
+                  return (
+                    <div 
+                      key={ex.id} 
+                      className="flex-between" 
+                      style={{ 
+                        background: isCompleted ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.01)', 
+                        padding: '0.65rem 1rem', 
+                        borderRadius: '8px', 
+                        border: '1px solid var(--border-subtle)', 
+                        flexWrap: 'wrap', 
+                        gap: '0.75rem',
+                        opacity: isCompleted ? 1 : 0.45,
+                        transition: 'all 0.25s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '150px' }}>
+                        <input
+                          type="checkbox"
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            accentColor: 'var(--accent-blue)',
+                          }}
+                          checked={isCompleted}
+                          onChange={(e) => setCompletedExerciseIds({
+                            ...completedExerciseIds,
+                            [ex.id]: e.target.checked
                           })}
-                          placeholder="kg"
                         />
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 600, textDecoration: isCompleted ? 'none' : 'line-through', color: isCompleted ? '#ffffff' : 'var(--text-muted)' }}>{ex.name}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ex.series}x{ex.repetitions} • PR: {ex.prWeight > 0 ? `${ex.prWeight}kg` : 'Nenhum'}</div>
+                        </div>
                       </div>
                       
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Esforço RPE</span>
-                        <select 
-                          className="form-control" 
-                          style={{ width: '105px', height: '36px', fontSize: '0.75rem', padding: '0 0.25rem', background: 'var(--bg-card)' }}
-                          value={logRpes[ex.id] || 8}
-                          onChange={(e) => setLogRpes({
-                            ...logRpes,
-                            [ex.id]: Number(e.target.value)
-                          })}
-                        >
-                          <option value="10">10 (Máximo)</option>
-                          <option value="9">9 (1 Rep. Res.)</option>
-                          <option value="8">8 (2 Rep. Res.)</option>
-                          <option value="7">7 (3 Rep. Res.)</option>
-                          <option value="6">6 (Aquecim.)</option>
-                        </select>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                          <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Peso (kg)</span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            className="form-control" 
+                            style={{ width: '80px', height: '36px', textAlign: 'center', padding: '0.25rem', background: isCompleted ? '' : 'rgba(0,0,0,0.2)' }}
+                            value={logWeights[ex.id] || ''}
+                            onChange={(e) => setLogWeights({
+                              ...logWeights,
+                              [ex.id]: Number(e.target.value)
+                            })}
+                            placeholder="kg"
+                            disabled={!isCompleted}
+                          />
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                          <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Esforço RPE</span>
+                          <select 
+                            className="form-control" 
+                            style={{ width: '105px', height: '36px', fontSize: '0.75rem', padding: '0 0.25rem', background: isCompleted ? 'var(--bg-card)' : 'rgba(0,0,0,0.2)' }}
+                            value={logRpes[ex.id] || 8}
+                            onChange={(e) => setLogRpes({
+                              ...logRpes,
+                              [ex.id]: Number(e.target.value)
+                            })}
+                            disabled={!isCompleted}
+                          >
+                            <option value="10">10 (Máximo)</option>
+                            <option value="9">9 (1 Rep. Res.)</option>
+                            <option value="8">8 (2 Rep. Res.)</option>
+                            <option value="7">7 (3 Rep. Res.)</option>
+                            <option value="6">6 (Aquecim.)</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setIsLogModalOpen(false)}>Cancelar</button>
