@@ -29,6 +29,26 @@ export interface Workout {
   isTemplate: boolean;
 }
 
+export interface RunningPlanWeekDay {
+  dayName: string;
+  training: string;
+  isRest: boolean;
+  isDone?: boolean;
+}
+
+export interface RunningPlanWeek {
+  weekNumber: number;
+  days: RunningPlanWeekDay[];
+}
+
+export interface RunningPlan {
+  id: string;
+  targetDistance: number;
+  weeksCount: number;
+  createdAt: string;
+  weeks: RunningPlanWeek[];
+}
+
 export interface WorkoutLogExercise {
   name: string;
   muscleGroup: string;
@@ -175,6 +195,7 @@ const KEYS = {
   RECIPES: 'vs_recipes',
   MEAL_PLANS: 'vs_meal_plans',
   FOOD_LOGS: 'vs_food_logs',
+  RUNNING_PLAN: 'vs_running_plan',
   LAST_EMAIL_SENT_WEEK: 'vs_last_email_sent_week',
 };
 
@@ -343,6 +364,7 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
     { subpath: 'recipes', key: KEYS.RECIPES, defaultVal: INITIAL_RECIPES },
     { subpath: 'meal_plans', key: KEYS.MEAL_PLANS, defaultVal: [] },
     { subpath: 'food_logs', key: KEYS.FOOD_LOGS, defaultVal: [] },
+    { subpath: 'running_plans', key: KEYS.RUNNING_PLAN, defaultVal: [] },
   ];
 
   collectionsToSync.forEach(({ subpath, key, defaultVal }) => {
@@ -619,5 +641,22 @@ export const db = {
     const logs = db.getFoodLogs().filter(l => l.id !== id);
     saveToStorage(KEYS.FOOD_LOGS, logs);
     removeFromFirestore('food_logs', id);
+  },
+
+  // Planilha de Corrida IA
+  getRunningPlan: (): RunningPlan | null => {
+    const plans = getFromStorage<RunningPlan[]>(KEYS.RUNNING_PLAN, []);
+    return plans.length > 0 ? plans[0] : null;
+  },
+  saveRunningPlan: (plan: RunningPlan): void => {
+    saveToStorage(KEYS.RUNNING_PLAN, [plan]);
+    writeToFirestore('running_plans', plan.id, plan);
+  },
+  deleteRunningPlan: (): void => {
+    const active = db.getRunningPlan();
+    if (active) {
+      saveToStorage(KEYS.RUNNING_PLAN, []);
+      removeFromFirestore('running_plans', active.id);
+    }
   }
 };

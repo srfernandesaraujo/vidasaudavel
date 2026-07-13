@@ -1,4 +1,4 @@
-import { db, type Exercise, type WorkoutLog, type RunLog, type BodyCompLog } from './db';
+import { db, type Exercise, type WorkoutLog, type RunLog, type BodyCompLog, type RunningPlan } from './db';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -642,6 +642,152 @@ Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de cód
   // Limpa blocos de código markdown se o modelo retornar
   const cleanJsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(cleanJsonStr);
+}
+
+// -------------------------------------------------------------
+// PLANILHA DE CORRIDA PERSONALIZADA COM IA
+// -------------------------------------------------------------
+
+function generateLocalRunningPlan(targetDistance: number, weeksCount: number): RunningPlan {
+  const planId = `plan-${Date.now()}`;
+  const weeks: any[] = [];
+  
+  const daysOfWeek = [
+    { name: 'Segunda-feira', isWorkout: true },
+    { name: 'Terça-feira', isWorkout: false },
+    { name: 'Quarta-feira', isWorkout: true },
+    { name: 'Quinta-feira', isWorkout: false },
+    { name: 'Sexta-feira', isWorkout: false },
+    { name: 'Sábado', isWorkout: true },
+    { name: 'Domingo', isWorkout: false },
+  ];
+
+  for (let w = 1; w <= weeksCount; w++) {
+    const weekDays: any[] = [];
+    
+    // Calcula progressão da distância
+    const progressRatio = w / weeksCount;
+    // O longão cresce de 50% até 100% da distância alvo
+    const longDistance = Number((targetDistance * (0.5 + 0.5 * progressRatio)).toFixed(1));
+    const midDistance = Number((longDistance * 0.6).toFixed(1));
+
+    daysOfWeek.forEach(day => {
+      let training = 'Descanso Ativo / Recuperação';
+      let isRest = true;
+
+      if (day.isWorkout) {
+        isRest = false;
+        if (day.name === 'Segunda-feira') {
+          // Treino de tiros ou técnico
+          if (targetDistance <= 5) {
+            const numTuros = 4 + w;
+            training = `Treino Intervalado: 10 min de aquecimento + ${numTuros}x tiros de 200m em ritmo forte (90% esforço) com 1:30 min de caminhada lenta para descansar + 5 min de desaquecimento.`;
+          } else if (targetDistance <= 10) {
+            const numTuros = 3 + w;
+            training = `Treino de Tiros: 10 min de aquecimento + ${numTuros}x tiros de 400m em ritmo rápido (85% esforço) com 2:00 min de caminhada de descanso + 5 min de desaquecimento.`;
+          } else {
+            const numTuros = 2 + Math.floor(w / 2);
+            training = `Treino de Ritmo/Tiros: 10 min de aquecimento + ${numTuros}x repetições de 800m no ritmo alvo de prova com 2:30 min de caminhada de descanso + 5 min de desaquecimento.`;
+          }
+        } else if (day.name === 'Quarta-feira') {
+          // Treino de ritmo contínuo
+          training = `Corrida de Ritmo (Tempo Run): 5 min aquecimento + ${midDistance} km em ritmo constante e confortável (Zona 3 cardíaca) + 5 min desaquecimento.`;
+        } else if (day.name === 'Sábado') {
+          // Longão progressivo
+          if (w === weeksCount) {
+            training = `🏆 DESAFIO FINAL: Corra os ${targetDistance} km no seu ritmo alvo! Concentre-se na respiração e hidratação. Você se preparou para este dia!`;
+          } else {
+            training = `Treino Longo (Longão): Corrida contínua de ${longDistance} km em ritmo leve/moderado (Zona 2 cardíaca para construir base aeróbica).`;
+          }
+        }
+      }
+
+      weekDays.push({
+        dayName: day.name,
+        training,
+        isRest,
+        isDone: false
+      });
+    });
+
+    weeks.push({
+      weekNumber: w,
+      days: weekDays
+    });
+  }
+
+  return {
+    id: planId,
+    targetDistance,
+    weeksCount,
+    createdAt: new Date().toISOString(),
+    weeks
+  };
+}
+
+export async function generateRunningPlan(targetDistance: number, weeksCount: number): Promise<RunningPlan> {
+  const settings = db.getSettings();
+
+  const prompt = `Você é um Treinador Olímpico de Corrida de Rua. Gere uma planilha de treinos de corrida personalizada em formato JSON para um atleta que tem como objetivo correr a distância de ${targetDistance} km no prazo de ${weeksCount} semanas.
+  
+  Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto adicional:
+  {
+    "id": "plan-${Date.now()}",
+    "targetDistance": ${targetDistance},
+    "weeksCount": ${weeksCount},
+    "createdAt": "${new Date().toISOString()}",
+    "weeks": [
+      {
+        "weekNumber": 1,
+        "days": [
+          { "dayName": "Segunda-feira", "training": "Descrição detalhada do treino em português (ex: tiros ou caminhada + corrida leve)", "isRest": false, "isDone": false },
+          { "dayName": "Terça-feira", "training": "Descanso", "isRest": true, "isDone": false },
+          { "dayName": "Quarta-feira", "training": "Descrição detalhada do treino", "isRest": false, "isDone": false },
+          { "dayName": "Quinta-feira", "training": "Descanso", "isRest": true, "isDone": false },
+          { "dayName": "Sexta-feira", "training": "Descanso", "isRest": true, "isDone": false },
+          { "dayName": "Sábado", "training": "Descrição detalhada do treino longo (longão)", "isRest": false, "isDone": false },
+          { "dayName": "Domingo", "training": "Descanso", "isRest": true, "isDone": false }
+        ]
+      }
+    ]
+  }
+  
+  Diretrizes Técnicas da Planilha:
+  1. Crie um planejamento progressivo coerente com a ciência da educação física. A planilha deve conter 3 dias de treino por semana (Segunda-feira, Quarta-feira e Sábado) e os outros dias marcados como descanso ("isRest": true, "training": "Descanso").
+  2. A cada semana o volume total e a distância do longão de sábado devem aumentar de forma linear e segura, culminando com o "Desafio Final" de correr os ${targetDistance} km no sábado da última semana.
+  3. Formate as descrições em português brasileiro (pt-BR).`;
+
+  // Se houver chave e provedor válido, faz a chamada
+  if (settings.apiKey && settings.apiProvider !== 'none') {
+    try {
+      let rawText = '';
+      if (settings.apiProvider === 'gemini') {
+        const enrichedPrompt = `INSTRUÇÕES DO SISTEMA:\nVocê é um gerador de planilhas de treino de corrida em formato JSON. Siga as instruções do usuário estritamente.\n\nPrompt do Usuário: ${prompt}`;
+        rawText = await callGeminiAPI(settings.apiKey, enrichedPrompt, []);
+      } else if (settings.apiProvider === 'openai') {
+        rawText = await callOpenAIAPI(settings.apiKey, prompt, [], 'Você é um gerador de planilhas de treino de corrida em formato JSON.');
+      }
+
+      // Limpa blocos de código markdown se houver
+      const cleanJsonStr = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const plan = JSON.parse(cleanJsonStr) as RunningPlan;
+      
+      // Valida se o JSON possui a estrutura mínima
+      if (plan && Array.isArray(plan.weeks) && plan.weeks.length > 0) {
+        return plan;
+      }
+    } catch (err) {
+      console.error('Erro ao chamar a IA para planilha de corridas:', err);
+      // Fallback automático para o gerador local em caso de erro na chamada à API
+    }
+  }
+
+  // Fallback offline local
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(generateLocalRunningPlan(targetDistance, weeksCount));
+    }, 1000);
+  });
 }
 
 

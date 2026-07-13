@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { db, type RunLog, type BodyCompLog } from '../utils/db';
+import { db, type RunLog, type BodyCompLog, type RunningPlan } from '../utils/db';
+import { generateRunningPlan } from '../utils/aiEngine';
 import { 
   Footprints, 
   TrendingUp, 
@@ -83,6 +84,89 @@ export const RunTracker: React.FC = () => {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
   const [editingBodyLogId, setEditingBodyLogId] = useState<string | null>(null);
+
+  // Planilha de Corrida IA
+  const [runningPlan, setRunningPlan] = useState<RunningPlan | null>(db.getRunningPlan());
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [planForm, setPlanForm] = useState({
+    targetDistance: '5',
+    weeksCount: '4'
+  });
+  const [expandedWeeks, setExpandedWeeks] = useState<Record<number, boolean>>({ 1: true });
+
+  const handleGeneratePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsGeneratingPlan(true);
+    try {
+      const plan = await generateRunningPlan(Number(planForm.targetDistance), Number(planForm.weeksCount));
+      db.saveRunningPlan(plan);
+      setRunningPlan(plan);
+      setIsPlanModalOpen(false);
+      
+      // Dispara confetes para comemorar a planilha gerada
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#3b82f6', '#8b5cf6', '#10b981']
+      });
+      alert('Sua planilha de treinos com IA foi gerada com sucesso! Bons treinos!');
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao gerar a planilha com IA. Tente novamente mais tarde.');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  };
+
+  const handleDeletePlan = () => {
+    if (window.confirm('Deseja realmente excluir sua planilha de treinos ativa? Todo o seu progresso nesta planilha será perdido.')) {
+      db.deleteRunningPlan();
+      setRunningPlan(null);
+      alert('Planilha excluída com sucesso.');
+    }
+  };
+
+  const handleToggleDayDone = (weekNumber: number, dayName: string, isDone: boolean) => {
+    if (!runningPlan) return;
+    
+    const updatedWeeks = runningPlan.weeks.map(week => {
+      if (week.weekNumber === weekNumber) {
+        const updatedDays = week.days.map(day => {
+          if (day.dayName === dayName) {
+            return { ...day, isDone };
+          }
+          return day;
+        });
+        return { ...week, days: updatedDays };
+      }
+      return week;
+    });
+
+    const updatedPlan = {
+      ...runningPlan,
+      weeks: updatedWeeks
+    };
+
+    db.saveRunningPlan(updatedPlan);
+    setRunningPlan(updatedPlan);
+
+    // Se concluiu todas as corridas da semana, confetes leves!
+    const targetWeek = updatedWeeks.find(w => w.weekNumber === weekNumber);
+    if (targetWeek) {
+      const weekWorkouts = targetWeek.days.filter(d => !d.isRest);
+      const isWeekDone = weekWorkouts.length > 0 && weekWorkouts.every(d => d.isDone);
+      if (isWeekDone && isDone) {
+        confetti({
+          particleCount: 50,
+          spread: 45,
+          colors: ['#10b981', '#059669']
+        });
+        alert(`Parabéns! Você concluiu todos os treinos da Semana ${weekNumber}! 🎉`);
+      }
+    }
+  };
 
   const handleOpenBodyModal = () => {
     setEditingBodyLogId(null);
@@ -642,6 +726,176 @@ export const RunTracker: React.FC = () => {
               </div>
               <div className="metric-mini-subtitle">Energia Consumida</div>
             </div>
+          </div>
+
+          {/* Seção da Planilha de Treino de Corrida */}
+          <div className="running-plan-section" style={{ marginBottom: '2rem' }}>
+            {!runningPlan ? (
+              <div className="glass-card plan-promo-card" style={{ padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(139, 92, 246, 0.05))', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                <div style={{ textAlign: 'left', flex: 1, minWidth: '280px' }}>
+                  <h3 style={{ fontSize: '1.25rem', margin: '0 0 0.5rem 0', color: '#ffffff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Award size={20} color="var(--accent-blue)" />
+                    Planilha de Corrida Inteligente (IA)
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0, lineHeight: '1.5' }}>
+                    Defina sua distância alvo (ex: 5km, 10km) e o prazo em semanas. Nosso treinador de IA montará um planejamento de treinos progressivo e sob medida para você alcançar sua meta!
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ background: 'linear-gradient(90deg, #2563eb, #8b5cf6)', border: 'none', boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)' }}
+                  onClick={() => setIsPlanModalOpen(true)}
+                >
+                  <Activity size={16} />
+                  Gerar Planilha com IA
+                </button>
+              </div>
+            ) : (
+              <div className="glass-card" style={{ padding: '2rem' }}>
+                <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem', marginBottom: '1.5rem' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <span className="badge badge-superior" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', marginBottom: '0.4rem', display: 'inline-block' }}>Planilha Ativa</span>
+                    <h3 style={{ fontSize: '1.4rem', margin: 0, color: '#ffffff', fontWeight: 600 }}>
+                      Meta: {runningPlan.targetDistance} km em {runningPlan.weeksCount} semanas
+                    </h3>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                      Gerada em: {new Date(runningPlan.createdAt).toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.2)', height: '36px' }}
+                    onClick={handleDeletePlan}
+                  >
+                    <Trash2 size={15} />
+                    Excluir Planilha
+                  </button>
+                </div>
+
+                {/* Progress bar do plano */}
+                {(() => {
+                  const totalDays = runningPlan.weeks.reduce((acc, w) => acc + w.days.filter(d => !d.isRest).length, 0);
+                  const doneDays = runningPlan.weeks.reduce((acc, w) => acc + w.days.filter(d => !d.isRest && d.isDone).length, 0);
+                  const pct = totalDays > 0 ? Math.round((doneDays / totalDays) * 100) : 0;
+                  return (
+                    <div style={{ marginBottom: '2rem', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div className="flex-between" style={{ fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Progresso dos Treinos Realizados</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{doneDays} de {totalDays} corridas concluídas ({pct}%)</span>
+                      </div>
+                      <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', borderRadius: '99px', transition: 'width 0.4s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Lista de semanas da planilha */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {runningPlan.weeks.map((week) => {
+                    const isExpanded = !!expandedWeeks[week.weekNumber];
+                    const weekWorkouts = week.days.filter(d => !d.isRest);
+                    const weekDoneWorkouts = weekWorkouts.filter(d => d.isDone);
+                    const isWeekCompleted = weekWorkouts.length > 0 && weekWorkouts.length === weekDoneWorkouts.length;
+
+                    return (
+                      <div 
+                        key={week.weekNumber} 
+                        className="glass-card" 
+                        style={{ 
+                          border: isWeekCompleted ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
+                          borderRadius: '8px', 
+                          overflow: 'hidden', 
+                          background: isWeekCompleted ? 'rgba(16, 185, 129, 0.02)' : 'rgba(255,255,255,0.01)'
+                        }}
+                      >
+                        {/* Cabeçalho da Semana */}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedWeeks({
+                            ...expandedWeeks,
+                            [week.weekNumber]: !isExpanded
+                          })}
+                          style={{
+                            width: '100%',
+                            background: 'none',
+                            border: 'none',
+                            padding: '1rem 1.25rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            color: '#ffffff',
+                            textAlign: 'left'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <span style={{ 
+                              background: isWeekCompleted ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.1)', 
+                              color: isWeekCompleted ? '#10b981' : '#60a5fa', 
+                              borderRadius: '4px', 
+                              padding: '0.2rem 0.5rem', 
+                              fontSize: '0.75rem', 
+                              fontWeight: 700 
+                            }}>
+                              Semana {week.weekNumber}
+                            </span>
+                            {isWeekCompleted && (
+                              <span style={{ fontSize: '0.8rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                                ✓ Concluída!
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {weekDoneWorkouts.length} / {weekWorkouts.length} treinos
+                          </div>
+                        </button>
+
+                        {/* Dias de Treino da Semana */}
+                        {isExpanded && (
+                          <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '0.5rem 0' }}>
+                            {week.days.map((day, dIdx) => (
+                              <div 
+                                key={dIdx} 
+                                className="flex-between"
+                                style={{ 
+                                  padding: '0.75rem 1.25rem', 
+                                  background: day.isRest ? 'rgba(0,0,0,0.08)' : (day.isDone ? 'rgba(16, 185, 129, 0.01)' : 'rgba(255,255,255,0.01)'),
+                                  borderBottom: dIdx < week.days.length - 1 ? '1px solid rgba(255,255,255,0.02)' : 'none',
+                                  opacity: day.isRest ? 0.7 : 1
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '200px' }}>
+                                  {!day.isRest ? (
+                                    <input 
+                                      type="checkbox"
+                                      style={{
+                                        width: '16px',
+                                        height: '16px',
+                                        cursor: 'pointer',
+                                        accentColor: '#10b981'
+                                      }}
+                                      checked={!!day.isDone}
+                                      onChange={(e) => handleToggleDayDone(week.weekNumber, day.dayName, e.target.checked)}
+                                    />
+                                  ) : (
+                                    <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.15rem 0.35rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Rest</span>
+                                  )}
+                                  <div style={{ textAlign: 'left' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: day.isDone ? 'var(--text-muted)' : '#ffffff', textDecoration: day.isDone ? 'line-through' : 'none' }}>{day.dayName}</span>
+                                    <div style={{ fontSize: '0.8rem', color: day.isDone ? 'var(--text-muted)' : 'var(--text-secondary)', marginTop: '0.15rem', textDecoration: day.isDone ? 'line-through' : 'none' }}>{day.training}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sessão Premium de Zonas e Projeções */}
@@ -1319,6 +1573,85 @@ export const RunTracker: React.FC = () => {
                 <button type="button" className="btn btn-secondary" onClick={() => setIsBodyModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Salvar Biometria</button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Gerar Planilha */}
+      {isPlanModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Activity size={18} color="var(--accent-blue)" />
+                Gerar Planilha com IA
+              </h3>
+              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsPlanModalOpen(false)} disabled={isGeneratingPlan}>X</button>
+            </div>
+            <form onSubmit={handleGeneratePlan}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
+                {isGeneratingPlan ? (
+                  <div style={{ padding: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+                    <div style={{ 
+                      width: '40px', 
+                      height: '40px', 
+                      border: '3px solid rgba(59, 130, 246, 0.1)', 
+                      borderTopColor: 'var(--accent-blue)', 
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    <div>
+                      <strong style={{ color: '#ffffff' }}>IA elaborando sua planilha...</strong>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Estruturando treinos progressivos de ritmo, tiros e longões.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, lineHeight: '1.4' }}>
+                      Selecione suas metas esportivas abaixo para que nossa inteligência artificial estruture sua rotina.
+                    </p>
+                    
+                    <div className="form-group">
+                      <label htmlFor="planDist">Distância Alvo (km)</label>
+                      <select 
+                        id="planDist" 
+                        className="form-control"
+                        value={planForm.targetDistance}
+                        onChange={(e) => setPlanForm({ ...planForm, targetDistance: e.target.value })}
+                      >
+                        <option value="5">5 km (Iniciante)</option>
+                        <option value="10">10 km (Intermediário)</option>
+                        <option value="15">15 km (Avançado)</option>
+                        <option value="21.1">Meia Maratona (21.1 km)</option>
+                        <option value="42.2">Maratona (42.2 km)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="planWeeks">Prazo de Treinamento (Semanas)</label>
+                      <select 
+                        id="planWeeks" 
+                        className="form-control"
+                        value={planForm.weeksCount}
+                        onChange={(e) => setPlanForm({ ...planForm, weeksCount: e.target.value })}
+                      >
+                        <option value="4">4 semanas (Intenso)</option>
+                        <option value="8">8 semanas (Ideal para 5k/10k)</option>
+                        <option value="12">12 semanas (Recomendado para 21k)</option>
+                        <option value="16">16 semanas (Preparo completo)</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {!isGeneratingPlan && (
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsPlanModalOpen(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">Gerar Minha Planilha</button>
+                </div>
+              )}
             </form>
           </div>
         </div>
