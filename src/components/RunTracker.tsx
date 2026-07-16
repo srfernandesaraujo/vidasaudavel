@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { db, type RunLog, type BodyCompLog, type RunningPlan } from '../utils/db';
+import { db, type RunLog, type BodyCompLog, type RunningPlan, type RunningPlanWeekDay } from '../utils/db';
 import { generateRunningPlan } from '../utils/aiEngine';
 import { 
   Footprints, 
@@ -11,7 +11,16 @@ import {
   Clock, 
   Activity,
   Award,
-  Edit2
+  Edit2,
+  Calendar,
+  List,
+  Printer,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  Watch,
+  X
 } from 'lucide-react';
 import { Chart as ChartJS, registerables, type ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -136,6 +145,214 @@ export const RunTracker: React.FC = () => {
     referencePace: '06:00'
   });
   const [expandedWeeks, setExpandedWeeks] = useState<Record<number, boolean>>({ 1: true });
+
+  // Controle de Visualização do Calendário e Modal de Detalhes
+  const [planViewMode, setPlanViewMode] = useState<'calendar' | 'weeks'>('calendar');
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState<Date>(() => {
+    const plan = db.getRunningPlan();
+    if (plan && plan.createdAt) {
+      return new Date(plan.createdAt);
+    }
+    return new Date();
+  });
+
+  useEffect(() => {
+    if (runningPlan && runningPlan.createdAt) {
+      setCurrentCalendarMonth(new Date(runningPlan.createdAt));
+    }
+  }, [runningPlan]);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<{
+    dateStr: string;
+    planDay?: RunningPlanWeekDay;
+    weekNumber?: number;
+    dayIndex?: number;
+    runs?: RunLog[];
+  } | null>(null);
+
+  // Formulário para registrar corrida pelo calendário
+  const [isLogFromCalendarOpen, setIsLogFromCalendarOpen] = useState(false);
+  const [logFromCalendarData, setLogFromCalendarData] = useState({
+    time: 30,
+    distance: 5.0,
+    heartRate: 140,
+    calories: 300,
+    notes: ''
+  });
+
+  // Mapeia os dias do plano para datas reais no formato YYYY-MM-DD
+  const planDaysByDate = useMemo(() => {
+    const mapping: Record<string, { weekNumber: number; dayIndex: number; day: RunningPlanWeekDay }> = {};
+    if (!runningPlan) return mapping;
+
+    // Encontra a segunda-feira da semana de criação do plano para alinhar a Semana 1
+    const planDate = new Date(runningPlan.createdAt);
+    const dayOfWeek = planDate.getDay(); // 0 = Domingo, 1 = Segunda, ...
+    
+    // Calcula a diferença para segunda-feira da semana do plano
+    // Se for domingo (0), a diferença é -6 dias. Caso contrário, é 1 - dayOfWeek.
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
+
+    runningPlan.weeks.forEach((week) => {
+      week.days.forEach((day, dIdx) => {
+        const d = new Date(mondayOfStartWeek);
+        d.setDate(mondayOfStartWeek.getDate() + ((week.weekNumber - 1) * 7 + dIdx));
+        
+        // Evita problemas de fuso horário construindo a string localmente
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        
+        mapping[dateStr] = {
+          weekNumber: week.weekNumber,
+          dayIndex: dIdx,
+          day
+        };
+      });
+    });
+
+    return mapping;
+  }, [runningPlan]);
+
+  // Agrupa as corridas reais realizadas no histórico por data YYYY-MM-DD
+  const runsByDate = useMemo(() => {
+    const mapping: Record<string, RunLog[]> = {};
+    runLogs.forEach((run) => {
+      if (!mapping[run.date]) {
+        mapping[run.date] = [];
+      }
+      mapping[run.date].push(run);
+    });
+    return mapping;
+  }, [runLogs]);
+
+  // Dias a serem desenhados na grade do calendário mensal
+  const calendarDays = useMemo(() => {
+    const year = currentCalendarMonth.getFullYear();
+    const month = currentCalendarMonth.getMonth();
+
+    // Primeiro dia do mês
+    const firstDayOfMonth = new Date(year, month, 1);
+    // Dia da semana do primeiro dia (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
+    let firstDayOfWeek = firstDayOfMonth.getDay();
+    // Ajusta para segunda-feira como início da semana (0 = Segunda, ..., 6 = Domingo)
+    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+
+    // Número de dias no mês
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const days: { date: Date; isCurrentMonth: boolean; dateStr: string }[] = [];
+
+    // Preenche os dias do mês anterior
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      const prevDate = new Date(year, month - 1, daysInPrevMonth - i);
+      const dateStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
+      days.push({ date: prevDate, isCurrentMonth: false, dateStr });
+    }
+
+    // Preenche os dias do mês atual
+    for (let i = 1; i <= daysInMonth; i++) {
+      const currDate = new Date(year, month, i);
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      days.push({ date: currDate, isCurrentMonth: true, dateStr });
+    }
+
+    // Preenche os dias do próximo mês para completar a grade de 7 colunas (geralmente até 35 ou 42 dias no total)
+    const totalSlots = days.length <= 35 ? 35 : 42;
+    const nextDaysCount = totalSlots - days.length;
+    for (let i = 1; i <= nextDaysCount; i++) {
+      const nextDate = new Date(year, month + 1, i);
+      const dateStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+      days.push({ date: nextDate, isCurrentMonth: false, dateStr });
+    }
+
+    return days;
+  }, [currentCalendarMonth]);
+
+  const handlePrevMonth = () => {
+    setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1));
+  };
+
+  const handleDayClick = (dateStr: string) => {
+    const planInfo = planDaysByDate[dateStr];
+    const runsInfo = runsByDate[dateStr];
+    
+    setSelectedCalendarDay({
+      dateStr,
+      planDay: planInfo?.day,
+      weekNumber: planInfo?.weekNumber,
+      dayIndex: planInfo?.dayIndex,
+      runs: runsInfo
+    });
+  };
+
+  const handleSaveRunFromCalendar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCalendarDay) return;
+
+    const { dateStr, planDay, weekNumber } = selectedCalendarDay;
+
+    // 1. Salva a corrida no histórico de corridas (runLogs)
+    const newRun: Omit<RunLog, 'id'> = {
+      date: dateStr,
+      time: Number(logFromCalendarData.time),
+      distance: Number(logFromCalendarData.distance),
+      pace: Number((Number(logFromCalendarData.time) / Number(logFromCalendarData.distance)).toFixed(2)),
+      calories: Number(logFromCalendarData.calories),
+      heartRate: Number(logFromCalendarData.heartRate)
+    };
+
+    db.addRunLog(newRun);
+    const updatedRunLogs = db.getRunLogs();
+    setRunLogs(updatedRunLogs);
+
+    // 2. Se for um treino da planilha, marca o dia como concluído (isDone = true)
+    if (planDay && weekNumber !== undefined) {
+      handleToggleDayDone(weekNumber, planDay.dayName, true);
+    }
+
+    // 3. Atualiza os dados selecionados na tela e fecha o sub-modal de logs
+    setIsLogFromCalendarOpen(false);
+    
+    // Atualiza o estado de selectedCalendarDay para que mostre o novo log de corrida adicionado
+    setSelectedCalendarDay(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        runs: [...(prev.runs || []), { ...newRun, id: `run-${Date.now()}` }]
+      };
+    });
+
+    // Animação de confetes
+    confetti({
+      particleCount: 45,
+      spread: 50,
+      colors: ['#10b981', '#3b82f6']
+    });
+  };
+
+  const handleDeleteRunFromCalendar = (runId: string) => {
+    if (window.confirm('Excluir esta corrida do histórico?')) {
+      db.deleteRunLog(runId);
+      const updatedRunLogs = db.getRunLogs();
+      setRunLogs(updatedRunLogs);
+      
+      // Atualiza o modal de detalhes
+      setSelectedCalendarDay(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          runs: (prev.runs || []).filter(r => r.id !== runId)
+        };
+      });
+    }
+  };
 
   const handleGeneratePlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,6 +541,107 @@ export const RunTracker: React.FC = () => {
       }));
     }
   }, [bodyForm.weight, bodyForm.bodyFat, bodyForm.muscleMass]);
+
+  const handleGPXUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const gpxText = event.target?.result as string;
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(gpxText, 'text/xml');
+        
+        // Obter pontos do trajeto
+        const trkpts = xmlDoc.getElementsByTagName('trkpt');
+        if (trkpts.length === 0) {
+          alert('O arquivo GPX não contém pontos de trajeto válidos.');
+          return;
+        }
+
+        // 1. Extrair data
+        const firstTimeTag = xmlDoc.getElementsByTagName('time')[0];
+        let runDate = new Date().toISOString().split('T')[0];
+        if (firstTimeTag && firstTimeTag.textContent) {
+          runDate = firstTimeTag.textContent.split('T')[0];
+        }
+
+        // 2. Calcular distância usando a fórmula de Haversine
+        let totalDistance = 0;
+        let prevLat = null as number | null;
+        let prevLon = null as number | null;
+        
+        let hrSum = 0;
+        let hrCount = 0;
+
+        for (let i = 0; i < trkpts.length; i++) {
+          const pt = trkpts[i];
+          const lat = parseFloat(pt.getAttribute('lat') || '0');
+          const lon = parseFloat(pt.getAttribute('lon') || '0');
+
+          if (prevLat !== null && prevLon !== null) {
+            const R = 6371; // Raio da Terra em km
+            const dLat = (lat - prevLat) * Math.PI / 180;
+            const dLon = (lon - prevLon) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(prevLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const d = R * c;
+            totalDistance += d;
+          }
+          prevLat = lat;
+          prevLon = lon;
+
+          // Tenta ler batimentos cardíacos
+          const hrTags = pt.getElementsByTagNameNS('*', 'hr');
+          const hrTag = hrTags.length > 0 ? hrTags[0] : pt.getElementsByTagName('hr')[0];
+          if (hrTag && hrTag.textContent) {
+            const hrVal = parseInt(hrTag.textContent, 10);
+            if (!isNaN(hrVal) && hrVal > 30) {
+              hrSum += hrVal;
+              hrCount++;
+            }
+          }
+        }
+
+        // 3. Calcular tempo
+        let totalMinutes = 30; // default
+        const timeTags = xmlDoc.getElementsByTagName('time');
+        if (timeTags.length >= 2) {
+          const startTime = new Date(timeTags[0].textContent || '');
+          const endTime = new Date(timeTags[timeTags.length - 1].textContent || '');
+          if (!isNaN(startTime.getTime()) && !isNaN(endTime.getTime())) {
+            const diffMs = endTime.getTime() - startTime.getTime();
+            totalMinutes = Number((diffMs / (1000 * 60)).toFixed(1));
+          }
+        }
+
+        const avgHr = hrCount > 0 ? Math.round(hrSum / hrCount) : 0;
+        
+        // Estimativa de calorias baseado no peso
+        const weightLogs = db.getBodyCompLogs();
+        const weight = weightLogs.length > 0 ? weightLogs[weightLogs.length - 1].weight : 70;
+        const estimatedCalories = Math.round(1.03 * weight * totalDistance);
+
+        // Preenche os dados do formulário
+        setRunForm({
+          date: runDate,
+          time: String(totalMinutes),
+          distance: String(totalDistance.toFixed(2)),
+          calories: String(estimatedCalories),
+          heartRate: String(avgHr > 0 ? avgHr : '')
+        });
+
+        alert(`Arquivo GPX carregado com sucesso!\nDistância: ${totalDistance.toFixed(2)} km\nTempo: ${totalMinutes} min\nFC Média: ${avgHr > 0 ? avgHr + ' bpm' : 'N/A'}`);
+      } catch (err) {
+        console.error('Erro ao processar arquivo GPX:', err);
+        alert('Erro ao processar o arquivo GPX. Verifique se o formato está correto.');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const refreshData = () => {
     setRunLogs(db.getRunLogs());
@@ -702,6 +1020,213 @@ export const RunTracker: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <style>{`
+        /* Grade do Calendário */
+        .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 0.4rem;
+          margin-top: 0.5rem;
+        }
+
+        .calendar-header-day {
+          text-align: center;
+          font-weight: 700;
+          font-size: 0.8rem;
+          color: var(--text-secondary);
+          padding: 0.4rem 0;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .calendar-day-cell {
+          min-height: 96px;
+          background: rgba(255, 255, 255, 0.015);
+          border: 1px solid var(--border-subtle);
+          border-radius: 8px;
+          padding: 0.45rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          position: relative;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .calendar-day-cell:hover {
+          transform: translateY(-2px);
+          border-color: rgba(59, 130, 246, 0.4);
+          background: rgba(255, 255, 255, 0.03);
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+        }
+
+        .calendar-day-cell.other-month {
+          opacity: 0.25;
+        }
+
+        .calendar-day-number {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: var(--text-secondary);
+          align-self: flex-start;
+          margin-bottom: 0.25rem;
+        }
+
+        .calendar-day-cell.today {
+          border-color: rgba(59, 130, 246, 0.3);
+          background: rgba(59, 130, 246, 0.03);
+        }
+
+        .calendar-day-cell.today .calendar-day-number {
+          color: #60a5fa;
+          background: rgba(59, 130, 246, 0.15);
+          border-radius: 50%;
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.78rem;
+        }
+
+        /* Blocos de Treino no Calendário */
+        .calendar-workout-block {
+          padding: 0.25rem 0.45rem;
+          border-radius: 6px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          text-align: left;
+          line-height: 1.25;
+          margin-top: 0.2rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: flex;
+          align-items: center;
+          gap: 0.2rem;
+        }
+
+        /* Cores de Status */
+        .workout-proposto {
+          background: rgba(37, 99, 235, 0.15);
+          border-left: 3px solid #3b82f6;
+          color: #93c5fd;
+        }
+        .workout-feito {
+          background: rgba(16, 185, 129, 0.15);
+          border-left: 3px solid #10b981;
+          color: #6ee7b7;
+        }
+        .workout-perdido {
+          background: rgba(239, 68, 68, 0.15);
+          border-left: 3px solid #ef4444;
+          color: #fca5a5;
+        }
+        .workout-avulso {
+          background: rgba(245, 158, 11, 0.15);
+          border-left: 3px solid #f59e0b;
+          color: #fde047;
+        }
+        .workout-descanso {
+          background: rgba(255, 255, 255, 0.03);
+          border-left: 3px solid rgba(255, 255, 255, 0.15);
+          color: var(--text-muted);
+          font-style: italic;
+        }
+
+        /* Barra de Ações Superior */
+        .plan-actions-bar {
+          display: flex;
+          background: rgba(255, 255, 255, 0.015);
+          border: 1px solid var(--border-subtle);
+          border-radius: 8px;
+          padding: 0.35rem;
+          gap: 0.35rem;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: flex-start;
+          margin-bottom: 1.25rem;
+        }
+
+        .plan-action-btn {
+          background: transparent;
+          border: none;
+          border-radius: 6px;
+          color: var(--text-secondary);
+          font-size: 0.78rem;
+          font-weight: 600;
+          padding: 0.4rem 0.75rem;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          transition: all 0.2s ease;
+        }
+
+        .plan-action-btn:hover {
+          background: rgba(255, 255, 255, 0.04);
+          color: #ffffff;
+        }
+
+        .plan-action-btn.active {
+          background: rgba(59, 130, 246, 0.12);
+          color: #60a5fa;
+          border: 1px solid rgba(59, 130, 246, 0.15);
+        }
+
+        .plan-action-btn.danger:hover {
+          background: rgba(239, 68, 68, 0.12);
+          color: #f87171;
+        }
+
+        /* Legendas de Cores */
+        .legends-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+          font-size: 0.72rem;
+          font-weight: 600;
+          align-items: center;
+          color: var(--text-secondary);
+        }
+
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+        }
+
+        .legend-color-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 2px;
+        }
+
+        /* Animações e Impressão */
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(2px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .running-plan-section, .running-plan-section * {
+            visibility: visible;
+          }
+          .running-plan-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .plan-actions-bar, .legends-container {
+            display: none !important;
+          }
+        }
+      `}</style>
       <header className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ textAlign: 'left' }}>
           <h1 style={{ fontSize: '2.25rem', background: 'linear-gradient(135deg, #ffffff, #8b92b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -800,301 +1325,504 @@ export const RunTracker: React.FC = () => {
               </div>
             ) : (
               <div className="glass-card" style={{ padding: '2rem' }}>
-                <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem', marginBottom: '1.5rem' }}>
-                  <div style={{ textAlign: 'left' }}>
-                    <span className="badge badge-superior" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', marginBottom: '0.4rem', display: 'inline-block' }}>Planilha Ativa</span>
-                    <h3 style={{ fontSize: '1.4rem', margin: 0, color: '#ffffff', fontWeight: 600 }}>
-                      Meta: {runningPlan.targetDistance} km em {runningPlan.weeksCount} semanas
-                    </h3>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                      Gerada em: {new Date(runningPlan.createdAt).toLocaleDateString('pt-BR')}
+                {/* 1. Cabeçalho de Resumo da Planilha Ativa (estilo Imagem 2) */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
+                    <div style={{ 
+                      width: '52px', 
+                      height: '52px', 
+                      borderRadius: '50%', 
+                      background: 'rgba(255,255,255,0.05)', 
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem'
+                    }}>
+                      🏃‍♀️
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1.35rem', margin: 0, color: '#ffffff', fontWeight: 700 }}>
+                        Planilha de {settings.userName || 'Atleta'}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '0.25rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                        <span><strong>Distância Meta:</strong> {runningPlan.targetDistance} km</span>
+                        <span><strong>Prazo:</strong> {runningPlan.weeksCount} semanas</span>
+                        <span><strong>Idade:</strong> {age} anos</span>
+                        <span><strong>Dispositivo:</strong> {runningPlan.hasWearable ? 'Wearable Ativo' : 'Sem monitor'}</span>
+                      </div>
                     </div>
                   </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '0.4rem 0.75rem', borderRadius: '8px', color: '#ff6b6b', fontSize: '0.8rem', fontWeight: 600 }}>
+                    🔒 Planilha Ativa
+                  </div>
+                </div>
+
+                {/* 2. Menu de Controle Superior (estilo Imagem 2) */}
+                <div className="plan-actions-bar">
                   <button 
-                    className="btn btn-secondary" 
-                    style={{ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.2)', height: '36px' }}
-                    onClick={handleDeletePlan}
+                    type="button"
+                    className={`plan-action-btn ${planViewMode === 'calendar' ? 'active' : ''}`}
+                    onClick={() => setPlanViewMode('calendar')}
+                    title="Visualizar em formato de Calendário Mensal"
                   >
-                    <Trash2 size={15} />
+                    <Calendar size={15} />
+                    Calendário
+                  </button>
+                  <button 
+                    type="button"
+                    className={`plan-action-btn ${planViewMode === 'weeks' ? 'active' : ''}`}
+                    onClick={() => setPlanViewMode('weeks')}
+                    title="Visualizar em formato de Lista de Semanas"
+                  >
+                    <List size={15} />
+                    Lista Semanal
+                  </button>
+                  <div style={{ height: '20px', width: '1px', background: 'var(--border-subtle)', margin: '0 0.25rem' }}></div>
+                  <button 
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => setIsPlanModalOpen(true)}
+                    title="Configurar/Gerar novo planejamento com a IA"
+                  >
+                    <Sparkles size={14} color="#60a5fa" />
+                    Ajustar com IA
+                  </button>
+                  <button 
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => {
+                      const zonesEl = document.getElementById('cardio-zones-section');
+                      if (zonesEl) zonesEl.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    title="Ver zonas de esforço cardíaco"
+                  >
+                    <Heart size={14} color="#f87171" />
+                    Zonas FC
+                  </button>
+                  <button 
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => setIsRunModalOpen(true)}
+                    title="Registrar corrida manual no histórico"
+                  >
+                    <Plus size={14} color="#34d399" />
+                    Registrar Corrida
+                  </button>
+                  <button 
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => window.print()}
+                    title="Imprimir calendário de treinos"
+                  >
+                    <Printer size={14} />
+                    Imprimir
+                  </button>
+                  <div style={{ flex: 1 }}></div>
+                  <button 
+                    type="button"
+                    className="plan-action-btn danger"
+                    style={{ color: '#ff6b6b' }}
+                    onClick={handleDeletePlan}
+                    title="Excluir a planilha de treinos e todo o progresso"
+                  >
+                    <Trash2 size={14} />
                     Excluir Planilha
                   </button>
                 </div>
 
-                {/* Progress bar do plano */}
+                {/* 3. Barra de Progresso dos Treinos */}
                 {(() => {
                   const totalDays = runningPlan.weeks.reduce((acc, w) => acc + w.days.filter(d => !d.isRest).length, 0);
                   const doneDays = runningPlan.weeks.reduce((acc, w) => acc + w.days.filter(d => !d.isRest && d.isDone).length, 0);
                   const pct = totalDays > 0 ? Math.round((doneDays / totalDays) * 100) : 0;
                   return (
-                    <div style={{ marginBottom: '2rem', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <div className="flex-between" style={{ fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Progresso dos Treinos Realizados</span>
-                        <span style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{doneDays} de {totalDays} corridas concluídas ({pct}%)</span>
+                    <div style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div className="flex-between" style={{ fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Progresso da Planilha de Corrida</span>
+                        <span style={{ fontWeight: 700, color: '#60a5fa' }}>{doneDays} de {totalDays} treinos concluídos ({pct}%)</span>
                       </div>
-                      <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '8px', background: 'rgba(255,255,255,0.04)', borderRadius: '99px', overflow: 'hidden' }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', borderRadius: '99px', transition: 'width 0.4s ease' }} />
                       </div>
                     </div>
                   );
                 })()}
 
-                {/* Lista de semanas da planilha */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {runningPlan.weeks.map((week) => {
-                    const isExpanded = !!expandedWeeks[week.weekNumber];
-                    const weekWorkouts = week.days.filter(d => !d.isRest);
-                    const weekDoneWorkouts = weekWorkouts.filter(d => d.isDone);
-                    const isWeekCompleted = weekWorkouts.length > 0 && weekWorkouts.length === weekDoneWorkouts.length;
+                {/* 4. Barra de Legendas de Cores (Estilo Imagem 2) */}
+                <div className="legends-container">
+                  <div className="legend-item">
+                    <div className="legend-color-dot" style={{ background: '#3b82f6' }}></div>
+                    <span>Treino Proposto</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color-dot" style={{ background: '#10b981' }}></div>
+                    <span>Treino Feito</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color-dot" style={{ background: '#f59e0b' }}></div>
+                    <span>Treino Avulso</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color-dot" style={{ background: '#ef4444' }}></div>
+                    <span>Treino Perdido</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color-dot" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid var(--border-subtle)' }}></div>
+                    <span>Descanso</span>
+                  </div>
+                </div>
 
-                    return (
-                      <div 
-                        key={week.weekNumber} 
-                        className="glass-card" 
-                        style={{ 
-                          border: isWeekCompleted ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
-                          borderRadius: '8px', 
-                          overflow: 'hidden', 
-                          background: isWeekCompleted ? 'rgba(16, 185, 129, 0.02)' : 'rgba(255,255,255,0.01)'
-                        }}
+                {/* 5. Conteúdo Dinâmico (Calendário vs Semanas) */}
+                {planViewMode === 'calendar' ? (
+                  <div style={{ animation: 'fadeIn 0.25s ease' }}>
+                    {/* Barra de Navegação do Mês do Calendário */}
+                    <div className="flex-between" style={{ marginBottom: '1.25rem', background: 'rgba(255,255,255,0.02)', padding: '0.65rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ display: 'flex', alignItems: 'center', padding: '0.35rem 0.5rem' }}
+                        onClick={handlePrevMonth}
                       >
-                        {/* Cabeçalho da Semana */}
-                        <button
-                          type="button"
-                          onClick={() => setExpandedWeeks({
-                            ...expandedWeeks,
-                            [week.weekNumber]: !isExpanded
-                          })}
-                          style={{
-                            width: '100%',
-                            background: 'none',
-                            border: 'none',
-                            padding: '1rem 1.25rem',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            cursor: 'pointer',
-                            color: '#ffffff',
-                            textAlign: 'left'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ 
-                              background: isWeekCompleted ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.1)', 
-                              color: isWeekCompleted ? '#10b981' : '#60a5fa', 
-                              borderRadius: '4px', 
-                              padding: '0.2rem 0.5rem', 
-                              fontSize: '0.75rem', 
-                              fontWeight: 700 
-                            }}>
-                              Semana {week.weekNumber}
-                            </span>
-                            {isWeekCompleted && (
-                              <span style={{ fontSize: '0.8rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                                ✓ Concluída!
-                              </span>
+                        <ChevronLeft size={16} />
+                      </button>
+                      <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, textTransform: 'capitalize', color: '#ffffff' }}>
+                        {currentCalendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                      </h4>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ display: 'flex', alignItems: 'center', padding: '0.35rem 0.5rem' }}
+                        onClick={handleNextMonth}
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+
+                    {/* Grade de Cabeçalho dos Dias da Semana */}
+                    <div className="calendar-grid" style={{ marginBottom: '0.25rem' }}>
+                      {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map(d => (
+                        <div key={d} className="calendar-header-day">
+                          {d.slice(0, 3)}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Grade dos Dias do Mês */}
+                    <div className="calendar-grid">
+                      {calendarDays.map((slot, index) => {
+                        const planInfo = planDaysByDate[slot.dateStr];
+                        const runsInfo = runsByDate[slot.dateStr];
+                        const isToday = new Date().toISOString().split('T')[0] === slot.dateStr;
+                        
+                        let blockClass = '';
+                        let blockLabel = '';
+                        
+                        if (planInfo) {
+                          const { day } = planInfo;
+                          if (day.isRest) {
+                            blockClass = 'workout-descanso';
+                            blockLabel = '💤 Descanso';
+                          } else {
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const isPast = slot.dateStr < todayStr;
+                            
+                            if (day.isDone || (runsInfo && runsInfo.length > 0)) {
+                              blockClass = 'workout-feito';
+                              blockLabel = `✓ ${day.dayName.slice(0, 3)}: Feito`;
+                            } else if (isPast) {
+                              blockClass = 'workout-perdido';
+                              blockLabel = `❌ ${day.dayName.slice(0, 3)}: Perdido`;
+                            } else {
+                              blockClass = 'workout-proposto';
+                              blockLabel = `🏃‍♂️ ${day.dayName.slice(0, 3)}: Proposto`;
+                            }
+                          }
+                        } else if (runsInfo && runsInfo.length > 0) {
+                          blockClass = 'workout-avulso';
+                          blockLabel = `⭐ Avulso: ${runsInfo[0].distance}km`;
+                        }
+
+                        return (
+                          <div 
+                            key={index} 
+                            className={`calendar-day-cell ${!slot.isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}`}
+                            onClick={() => handleDayClick(slot.dateStr)}
+                          >
+                            <span className="calendar-day-number">{slot.date.getDate()}</span>
+                            
+                            {blockLabel && (
+                              <div className={`calendar-workout-block ${blockClass}`}>
+                                {blockLabel}
+                              </div>
+                            )}
+
+                            {/* Mostrar pequenos pontos extras se houver múltiplos treinos ou corrida em dia de descanso */}
+                            {planInfo && !planInfo.day.isRest && runsInfo && runsInfo.length > 0 && (
+                              <div style={{ fontSize: '0.6rem', color: '#10b981', textAlign: 'left', marginTop: '0.2rem', fontWeight: 600 }}>
+                                🏃‍♂️ {runsInfo[0].distance} km real
+                              </div>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            {weekDoneWorkouts.length} / {weekWorkouts.length} treinos
-                          </div>
-                        </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  // Visualização em lista tradicional (Semanal)
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animation: 'fadeIn 0.25s ease' }}>
+                    {runningPlan.weeks.map((week) => {
+                      const isExpanded = !!expandedWeeks[week.weekNumber];
+                      const weekWorkouts = week.days.filter(d => !d.isRest);
+                      const weekDoneWorkouts = weekWorkouts.filter(d => d.isDone);
+                      const isWeekCompleted = weekWorkouts.length > 0 && weekWorkouts.length === weekDoneWorkouts.length;
 
-                        {/* Dias de Treino da Semana */}
-                        {isExpanded && (
-                          <div style={{ 
-                            borderTop: '1px solid var(--border-subtle)', 
-                            padding: '1.25rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '1.1rem',
-                            background: 'rgba(0, 0, 0, 0.12)'
-                          }}>
-                            {week.days.map((day, dIdx) => {
-                              if (day.isRest) {
+                      return (
+                        <div 
+                          key={week.weekNumber} 
+                          className="glass-card" 
+                          style={{ 
+                            border: isWeekCompleted ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
+                            borderRadius: '8px', 
+                            overflow: 'hidden', 
+                            background: isWeekCompleted ? 'rgba(16, 185, 129, 0.02)' : 'rgba(255,255,255,0.01)',
+                            padding: 0
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setExpandedWeeks({
+                              ...expandedWeeks,
+                              [week.weekNumber]: !isExpanded
+                            })}
+                            style={{
+                              width: '100%',
+                              background: 'none',
+                              border: 'none',
+                              padding: '1rem 1.25rem',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              color: '#ffffff',
+                              textAlign: 'left'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span style={{ 
+                                background: isWeekCompleted ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.1)', 
+                                color: isWeekCompleted ? '#10b981' : '#60a5fa', 
+                                borderRadius: '4px', 
+                                padding: '0.2rem 0.5rem', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 700 
+                              }}>
+                                Semana {week.weekNumber}
+                              </span>
+                              {isWeekCompleted && (
+                                <span style={{ fontSize: '0.8rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                                  ✓ Concluída!
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {weekDoneWorkouts.length} / {weekWorkouts.length} treinos
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div style={{ 
+                              borderTop: '1px solid var(--border-subtle)', 
+                              padding: '1.25rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '1.1rem',
+                              background: 'rgba(0, 0, 0, 0.12)'
+                            }}>
+                              {week.days.map((day, dIdx) => {
+                                if (day.isRest) {
+                                  return (
+                                    <div 
+                                      key={dIdx}
+                                      style={{
+                                        padding: '0.85rem 1.25rem',
+                                        borderRadius: '10px',
+                                        background: 'rgba(255, 255, 255, 0.01)',
+                                        border: '1px dashed rgba(255, 255, 255, 0.08)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        opacity: 0.55
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <span style={{ fontSize: '1.15rem' }}>💤</span>
+                                        <div style={{ textAlign: 'left' }}>
+                                          <strong style={{ color: '#ffffff', fontSize: '0.85rem', fontWeight: 600 }}>{day.dayName}</strong>
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>Descanso Total ou Recuperação Muscular</span>
+                                        </div>
+                                      </div>
+                                      <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>Rest</span>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div 
                                     key={dIdx}
                                     style={{
-                                      padding: '0.85rem 1.25rem',
-                                      borderRadius: '10px',
-                                      background: 'rgba(255, 255, 255, 0.01)',
-                                      border: '1px dashed rgba(255, 255, 255, 0.08)',
+                                      padding: '1.5rem',
+                                      borderRadius: '12px',
+                                      background: day.isDone ? 'rgba(16, 185, 129, 0.02)' : 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.005) 100%)',
+                                      border: day.isDone ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border-subtle)',
+                                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)',
                                       display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      opacity: 0.55
+                                      flexDirection: 'column',
+                                      gap: '1.1rem',
+                                      transition: 'all 0.3s ease',
+                                      opacity: day.isDone ? 0.75 : 1
                                     }}
                                   >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                      <span style={{ fontSize: '1.15rem' }}>💤</span>
-                                      <div style={{ textAlign: 'left' }}>
-                                        <strong style={{ color: '#ffffff', fontSize: '0.85rem', fontWeight: 600 }}>{day.dayName}</strong>
-                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>Descanso Total ou Recuperação Muscular</span>
+                                    <div className="flex-between" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)', paddingBottom: '0.75rem' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                                        <input 
+                                          type="checkbox"
+                                          style={{
+                                            width: '18px',
+                                            height: '18px',
+                                            cursor: 'pointer',
+                                            accentColor: '#10b981'
+                                          }}
+                                          checked={!!day.isDone}
+                                          onChange={(e) => handleToggleDayDone(week.weekNumber, day.dayName, e.target.checked)}
+                                        />
+                                        <span style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff' }}>{day.dayName}</span>
                                       </div>
+                                      
+                                      {(() => {
+                                        let badgeColor = '#60a5fa';
+                                        let bg = 'rgba(59, 130, 246, 0.12)';
+                                        let label = 'Corrida';
+                                        
+                                        const textLower = day.training.toLowerCase();
+                                        if (textLower.includes('intervalado') || textLower.includes('tiros') || textLower.includes('velocidade')) {
+                                          badgeColor = '#f87171';
+                                          bg = 'rgba(248, 113, 113, 0.12)';
+                                          label = '⚡ Intervalado';
+                                        } else if (textLower.includes('ritmo') || textLower.includes('tempo run') || textLower.includes('limiar')) {
+                                          badgeColor = '#38bdf8';
+                                          bg = 'rgba(56, 189, 248, 0.12)';
+                                          label = '📈 Tempo Run';
+                                        } else if (textLower.includes('longo') || textLower.includes('longão') || textLower.includes('desafio final')) {
+                                          badgeColor = '#34d399';
+                                          bg = 'rgba(52, 211, 153, 0.12)';
+                                          label = '🏃‍♂️ Longão';
+                                        }
+                                        
+                                        return (
+                                          <span style={{ 
+                                            color: badgeColor, 
+                                            background: bg, 
+                                            padding: '0.3rem 0.65rem', 
+                                            borderRadius: '6px', 
+                                            fontSize: '0.72rem', 
+                                            fontWeight: 800,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.5px'
+                                          }}>
+                                            {label}
+                                          </span>
+                                        );
+                                      })()}
                                     </div>
-                                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>Rest</span>
-                                  </div>
-                                );
-                              }
 
-                              return (
-                                <div 
-                                  key={dIdx}
-                                  style={{
-                                    padding: '1.5rem',
-                                    borderRadius: '12px',
-                                    background: day.isDone ? 'rgba(16, 185, 129, 0.02)' : 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.005) 100%)',
-                                    border: day.isDone ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border-subtle)',
-                                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '1.1rem',
-                                    transition: 'all 0.3s ease',
-                                    opacity: day.isDone ? 0.75 : 1
-                                  }}
-                                >
-                                  {/* Cabeçalho do Card */}
-                                  <div className="flex-between" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)', paddingBottom: '0.75rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                                      <input 
-                                        type="checkbox"
-                                        style={{
-                                          width: '18px',
-                                          height: '18px',
-                                          cursor: 'pointer',
-                                          accentColor: '#10b981'
-                                        }}
-                                        checked={!!day.isDone}
-                                        onChange={(e) => handleToggleDayDone(week.weekNumber, day.dayName, e.target.checked)}
-                                      />
-                                      <span style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff' }}>{day.dayName}</span>
-                                    </div>
-                                    
-                                    {/* Badge do Tipo de Treino */}
                                     {(() => {
-                                      let badgeColor = '#60a5fa';
-                                      let bg = 'rgba(59, 130, 246, 0.12)';
-                                      let label = 'Corrida';
-                                      
-                                      const textLower = day.training.toLowerCase();
-                                      if (textLower.includes('intervalado') || textLower.includes('tiros') || textLower.includes('velocidade')) {
-                                        badgeColor = '#f87171';
-                                        bg = 'rgba(248, 113, 113, 0.12)';
-                                        label = '⚡ Intervalado';
-                                      } else if (textLower.includes('ritmo') || textLower.includes('tempo run') || textLower.includes('limiar')) {
-                                        badgeColor = '#38bdf8';
-                                        bg = 'rgba(56, 189, 248, 0.12)';
-                                        label = '📈 Tempo Run';
-                                      } else if (textLower.includes('longo') || textLower.includes('longão') || textLower.includes('desafio final')) {
-                                        badgeColor = '#34d399';
-                                        bg = 'rgba(52, 211, 153, 0.12)';
-                                        label = '🏃‍♂️ Longão';
+                                      const parsed = parseTrainingText(day.training);
+                                      if (!parsed.isParsed) {
+                                        return (
+                                          <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', whiteSpace: 'pre-line', lineHeight: '1.6', textAlign: 'left' }}>
+                                            {day.training}
+                                          </div>
+                                        );
                                       }
-                                      
+
                                       return (
-                                        <span style={{ 
-                                          color: badgeColor, 
-                                          background: bg, 
-                                          padding: '0.3rem 0.65rem', 
-                                          borderRadius: '6px', 
-                                          fontSize: '0.72rem', 
-                                          fontWeight: 800,
-                                          textTransform: 'uppercase',
-                                          letterSpacing: '0.5px'
-                                        }}>
-                                          {label}
-                                        </span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                                          {parsed.title && (
+                                            <h4 style={{ margin: '0 0 0.15rem 0', fontSize: '1rem', color: '#ffffff', fontWeight: 700, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                              {parsed.title}
+                                            </h4>
+                                          )}
+                                          
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                            {parsed.warmUp && (
+                                              <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.02)', borderLeft: '3px solid #3b82f6', textAlign: 'left' }}>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🧘‍♂️ Aquecimento Ativo</div>
+                                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.warmUp}</div>
+                                              </div>
+                                            )}
+
+                                            {parsed.mainSet && (
+                                              <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.02)', borderLeft: '3px solid #ec4899', textAlign: 'left' }}>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f472b6', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>⚡ Trabalho Principal</div>
+                                                <div style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.5' }}>{parsed.mainSet}</div>
+                                              </div>
+                                            )}
+
+                                            {parsed.coolDown && (
+                                              <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.02)', borderLeft: '3px solid #10b981', textAlign: 'left' }}>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🌀 Volta à Calma</div>
+                                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.coolDown}</div>
+                                              </div>
+                                            )}
+
+                                            {parsed.coachTip && (
+                                              <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.02)', border: '1px dashed rgba(245, 158, 11, 0.15)', textAlign: 'left' }}>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>💡 Dica do Coach</div>
+                                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>"{parsed.coachTip}"</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
                                       );
                                     })()}
-                                  </div>
 
-                                  {/* Conteúdo do Treino Estruturado */}
-                                  {(() => {
-                                    const parsed = parseTrainingText(day.training);
-                                    if (!parsed.isParsed) {
-                                      return (
-                                        <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', whiteSpace: 'pre-line', lineHeight: '1.6', textAlign: 'left' }}>
-                                          {day.training}
-                                        </div>
-                                      );
-                                    }
-
-                                    return (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                                        {parsed.title && (
-                                          <h4 style={{ margin: '0 0 0.15rem 0', fontSize: '1rem', color: '#ffffff', fontWeight: 700, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            {parsed.title}
-                                          </h4>
+                                    {(day.objective || day.successCriteria) && (
+                                      <div style={{ 
+                                        display: 'grid', 
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                                        gap: '1rem',
+                                        marginTop: '0.2rem',
+                                        background: 'rgba(0, 0, 0, 0.25)',
+                                        padding: '0.9rem 1.1rem',
+                                        borderRadius: '10px',
+                                        border: '1px solid rgba(255, 255, 255, 0.03)'
+                                      }}>
+                                        {day.objective && (
+                                          <div style={{ textAlign: 'left' }}>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🎯 Adaptação Fisiológica</span>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.objective}</span>
+                                          </div>
                                         )}
-                                        
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                                          {parsed.warmUp && (
-                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.02)', borderLeft: '3px solid #3b82f6', textAlign: 'left' }}>
-                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🧘‍♂️ Aquecimento Ativo</div>
-                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.warmUp}</div>
-                                            </div>
-                                          )}
-
-                                          {parsed.mainSet && (
-                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.02)', borderLeft: '3px solid #ec4899', textAlign: 'left' }}>
-                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f472b6', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>⚡ Trabalho Principal</div>
-                                              <div style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.5' }}>{parsed.mainSet}</div>
-                                            </div>
-                                          )}
-
-                                          {parsed.coolDown && (
-                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.02)', borderLeft: '3px solid #10b981', textAlign: 'left' }}>
-                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🌀 Volta à Calma</div>
-                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.coolDown}</div>
-                                            </div>
-                                          )}
-
-                                          {parsed.coachTip && (
-                                            <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.02)', border: '1px dashed rgba(245, 158, 11, 0.15)', textAlign: 'left' }}>
-                                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>💡 Dica do Coach</div>
-                                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>"{parsed.coachTip}"</div>
-                                            </div>
-                                          )}
-                                        </div>
+                                        {day.successCriteria && (
+                                          <div style={{ textAlign: 'left' }}>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>✓ Critério de Sucesso</span>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.successCriteria}</span>
+                                          </div>
+                                        )}
                                       </div>
-                                    );
-                                  })()}
-
-                                  {/* Objetivos e Critérios de Sucesso */}
-                                  {(day.objective || day.successCriteria) && (
-                                    <div style={{ 
-                                      display: 'grid', 
-                                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
-                                      gap: '1rem',
-                                      marginTop: '0.2rem',
-                                      background: 'rgba(0, 0, 0, 0.25)',
-                                      padding: '0.9rem 1.1rem',
-                                      borderRadius: '10px',
-                                      border: '1px solid rgba(255, 255, 255, 0.03)'
-                                    }}>
-                                      {day.objective && (
-                                        <div style={{ textAlign: 'left' }}>
-                                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🎯 Adaptação Fisiológica</span>
-                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.objective}</span>
-                                        </div>
-                                      )}
-                                      {day.successCriteria && (
-                                        <div style={{ textAlign: 'left' }}>
-                                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', display: 'block', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>✓ Critério de Sucesso</span>
-                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{day.successCriteria}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1465,6 +2193,38 @@ export const RunTracker: React.FC = () => {
             </div>
             <form onSubmit={handleSaveRun}>
               <div className="modal-body">
+                {/* Zona de Sincronização GPX */}
+                <div style={{
+                  border: '2px dashed var(--border-subtle)',
+                  borderRadius: '10px',
+                  padding: '1.25rem',
+                  textAlign: 'center',
+                  marginBottom: '1.25rem',
+                  background: 'rgba(255, 255, 255, 0.01)',
+                  position: 'relative',
+                  cursor: 'pointer'
+                }}>
+                  <input
+                    type="file"
+                    accept=".gpx"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer'
+                    }}
+                    onChange={handleGPXUpload}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                    <Watch size={24} color="var(--accent-blue)" />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff' }}>Importar Corrida (GPX)</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Arraste seu arquivo esportivo GPX ou clique aqui</span>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="runDate">Data da Corrida</label>
                   <input
@@ -1968,6 +2728,320 @@ export const RunTracker: React.FC = () => {
                   <button type="submit" className="btn btn-primary">Gerar Minha Planilha</button>
                 </div>
               )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes do Dia Selecionado */}
+      {selectedCalendarDay && (
+        <div className="modal-overlay" style={{ zIndex: 1050 }}>
+          <div className="modal-content" style={{ maxWidth: '520px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s ease-out' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.85rem' }}>
+              <div style={{ textAlign: 'left' }}>
+                <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {new Date(selectedCalendarDay.dateStr + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}
+                </span>
+                <h3 className="modal-title" style={{ fontSize: '1.25rem', marginTop: '0.15rem', color: '#ffffff', fontWeight: 700 }}>
+                  {new Date(selectedCalendarDay.dateStr + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </h3>
+              </div>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', fontSize: '0.85rem' }} 
+                onClick={() => setSelectedCalendarDay(null)}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1.25rem 0.5rem 1.25rem 0', overflowY: 'auto', flex: 1 }}>
+              
+              {/* Informações do Treino Planejado (IA) */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '1rem' }}>
+                <h4 style={{ margin: '0 0 0.65rem 0', fontSize: '0.9rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <Calendar size={15} />
+                  Treino Planejado
+                </h4>
+                
+                {selectedCalendarDay.planDay ? (
+                  selectedCalendarDay.planDay.isRest ? (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontStyle: 'italic' }}>
+                      <span>💤</span> Dia de Descanso Total ou Recuperação Muscular. Aproveite para relaxar e regenerar suas fibras!
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div className="flex-between">
+                        <strong style={{ fontSize: '1rem', color: '#ffffff' }}>
+                          Semana {selectedCalendarDay.weekNumber} - {selectedCalendarDay.planDay.dayName}
+                        </strong>
+                        <span style={{ 
+                          background: selectedCalendarDay.planDay.isDone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(59, 130, 246, 0.12)', 
+                          color: selectedCalendarDay.planDay.isDone ? '#34d399' : '#60a5fa', 
+                          padding: '0.25rem 0.5rem', 
+                          borderRadius: '4px', 
+                          fontSize: '0.72rem', 
+                          fontWeight: 700 
+                        }}>
+                          {selectedCalendarDay.planDay.isDone ? 'Concluído' : 'Pendente'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.15)', padding: '0.85rem', borderRadius: '8px', borderLeft: '3px solid #3b82f6', whiteSpace: 'pre-line', lineHeight: '1.5' }}>
+                        {selectedCalendarDay.planDay.training}
+                      </div>
+
+                      {/* Objetivos Fisiológicos */}
+                      {(selectedCalendarDay.planDay.objective || selectedCalendarDay.planDay.successCriteria) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.65rem', background: 'rgba(0,0,0,0.1)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)', fontSize: '0.8rem' }}>
+                          {selectedCalendarDay.planDay.objective && (
+                            <div>
+                              <span style={{ color: '#60a5fa', fontWeight: 700, display: 'block', marginBottom: '0.1rem' }}>🎯 Adaptação Fisiológica:</span>
+                              <span style={{ color: 'var(--text-secondary)' }}>{selectedCalendarDay.planDay.objective}</span>
+                            </div>
+                          )}
+                          {selectedCalendarDay.planDay.successCriteria && (
+                            <div>
+                              <span style={{ color: '#34d399', fontWeight: 700, display: 'block', marginBottom: '0.1rem' }}>✓ Critério de Sucesso:</span>
+                              <span style={{ color: 'var(--text-secondary)' }}>{selectedCalendarDay.planDay.successCriteria}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                    Nenhum treino programado na planilha para este dia.
+                  </div>
+                )}
+              </div>
+
+              {/* Histórico Realizado (Corridas Gravadas) */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '1rem' }}>
+                <h4 style={{ margin: '0 0 0.65rem 0', fontSize: '0.9rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <Watch size={15} />
+                  Atividade Realizada
+                </h4>
+
+                {selectedCalendarDay.runs && selectedCalendarDay.runs.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {selectedCalendarDay.runs.map((run) => (
+                      <div 
+                        key={run.id} 
+                        style={{ 
+                          background: 'rgba(16, 185, 129, 0.03)', 
+                          border: '1px solid rgba(16, 185, 129, 0.15)', 
+                          borderRadius: '8px', 
+                          padding: '0.85rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        <div className="flex-between">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '1.25rem' }}>🏃‍♂️</span>
+                            <div>
+                              <strong style={{ color: '#ffffff', fontSize: '0.92rem' }}>Corrida de {run.distance} km</strong>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Ritmo de {run.pace} min/km</span>
+                            </div>
+                          </div>
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary btn-sm" 
+                            style={{ color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.15)', padding: '0.2rem 0.4rem' }}
+                            onClick={() => handleDeleteRunFromCalendar(run.id!)}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', background: 'rgba(0,0,0,0.15)', padding: '0.5rem', borderRadius: '6px', fontSize: '0.78rem', textAlign: 'center' }}>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Tempo</span>
+                            <strong style={{ color: '#ffffff' }}>{run.time} min</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Frec. Cardíaca</span>
+                            <strong style={{ color: '#ffffff' }}>{run.heartRate ? `${run.heartRate} bpm` : '--'}</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem' }}>Calorias</span>
+                            <strong style={{ color: '#ffffff' }}>{run.calories ? `${run.calories} kcal` : '--'}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    <p style={{ margin: '0 0 0.5rem 0' }}>Nenhuma atividade registrada para esta data.</p>
+                    {(!selectedCalendarDay.planDay || !selectedCalendarDay.planDay.isRest) && (
+                      <button 
+                        type="button" 
+                        className="btn btn-primary btn-sm" 
+                        style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#34d399' }}
+                        onClick={() => {
+                          // Se houver treino planejado, sugere a distância dele por padrão
+                          const defaultDistance = selectedCalendarDay.planDay 
+                            ? Number(selectedCalendarDay.planDay.training.match(/\b\d+(?:[\.,]\d+)?\s*(?:km|kms)\b/i)?.[0]?.match(/\d+(?:[\.,]\d+)?/)?.[0] || 5)
+                            : 5;
+                          
+                          setLogFromCalendarData({
+                            time: 30,
+                            distance: defaultDistance,
+                            heartRate: Number(runningPlan?.maxHeartRate ? Math.round(Number(runningPlan.maxHeartRate) * 0.75) : 140),
+                            calories: Math.round(defaultDistance * 65),
+                            notes: ''
+                          });
+                          setIsLogFromCalendarOpen(true);
+                        }}
+                      >
+                        Registrar Treino Realizado
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botão de Conclusão Rápida sem Registrar Logs de Distância */}
+              {selectedCalendarDay.planDay && !selectedCalendarDay.planDay.isRest && !selectedCalendarDay.planDay.isDone && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ borderColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.65rem' }}
+                  onClick={() => {
+                    handleToggleDayDone(selectedCalendarDay.weekNumber!, selectedCalendarDay.planDay!.dayName, true);
+                    setSelectedCalendarDay(prev => {
+                      if (!prev || !prev.planDay) return null;
+                      return {
+                        ...prev,
+                        planDay: {
+                          ...prev.planDay,
+                          isDone: true
+                        }
+                      };
+                    });
+                    confetti({ particleCount: 30, spread: 40, colors: ['#10b981'] });
+                  }}
+                >
+                  <CheckCircle size={16} />
+                  Apenas marcar dia como concluído
+                </button>
+              )}
+            </div>
+            
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.85rem' }}>
+              <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setSelectedCalendarDay(null)}>
+                Fechar Detalhes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Registrar Corrida Realizada a partir do Calendário */}
+      {isLogFromCalendarOpen && selectedCalendarDay && (
+        <div className="modal-overlay" style={{ zIndex: 1060, background: 'rgba(0, 0, 0, 0.75)' }}>
+          <div className="modal-content" style={{ maxWidth: '420px', animation: 'fadeIn 0.2s ease-out' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ fontSize: '1.15rem', color: '#ffffff', fontWeight: 700 }}>
+                Registrar Atividade Realizada
+              </h3>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ padding: '0.2rem 0.4rem' }} 
+                onClick={() => setIsLogFromCalendarOpen(false)}
+              >
+                X
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveRunFromCalendar}>
+              <div className="modal-body" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 0' }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border-subtle)', marginBottom: '0.25rem' }}>
+                  A atividade será salva no histórico geral de corridas no dia <strong>{new Date(selectedCalendarDay.dateStr + 'T00:00:00').toLocaleDateString('pt-BR')}</strong>.
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="calDistance">Distância Percorrida (km)</label>
+                  <input 
+                    id="calDistance"
+                    type="number"
+                    step="0.01"
+                    className="form-control"
+                    value={logFromCalendarData.distance}
+                    onChange={(e) => {
+                      const dist = Number(e.target.value);
+                      setLogFromCalendarData({
+                        ...logFromCalendarData,
+                        distance: dist,
+                        calories: Math.round(dist * 65)
+                      });
+                    }}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="calTime">Duração Total (minutos)</label>
+                  <input 
+                    id="calTime"
+                    type="number"
+                    className="form-control"
+                    value={logFromCalendarData.time}
+                    onChange={(e) => setLogFromCalendarData({ ...logFromCalendarData, time: Number(e.target.value) })}
+                    required
+                  />
+                </div>
+
+                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="calHeart">Frec. Cardíaca Média</label>
+                    <input 
+                      id="calHeart"
+                      type="number"
+                      className="form-control"
+                      value={logFromCalendarData.heartRate}
+                      onChange={(e) => setLogFromCalendarData({ ...logFromCalendarData, heartRate: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="calCalories">Calorias (kcal)</label>
+                    <input 
+                      id="calCalories"
+                      type="number"
+                      className="form-control"
+                      value={logFromCalendarData.calories}
+                      onChange={(e) => setLogFromCalendarData({ ...logFromCalendarData, calories: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="calNotes">Observações do Treino</label>
+                  <textarea 
+                    id="calNotes"
+                    className="form-control"
+                    rows={2}
+                    placeholder="Ex: Como se sentiu? Dor, sensação de esforço..."
+                    value={logFromCalendarData.notes}
+                    onChange={(e) => setLogFromCalendarData({ ...logFromCalendarData, notes: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsLogFromCalendarOpen(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(90deg, #10b981, #059669)', border: 'none' }}>
+                  Salvar Treino
+                </button>
+              </div>
             </form>
           </div>
         </div>

@@ -8,7 +8,8 @@ import {
   Bot, 
   HeartPulse, 
   Settings,
-  LogOut
+  LogOut,
+  Trophy
 } from 'lucide-react';
 import './Styles/sidebar.css';
 
@@ -26,6 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user,
     { id: 'runtracker', name: 'Corrida & Corpo', icon: Footprints, colorClass: 'active-blue' },
     { id: 'diet', name: 'Dieta & Nutrição', icon: Apple, colorClass: 'active-orange' },
     { id: 'calendar', name: 'Calendário', icon: Calendar, colorClass: 'active' },
+    { id: 'achievements', name: 'Conquistas', icon: Trophy, colorClass: 'active-purple' },
     { id: 'aicoach', name: 'Treinador IA', icon: Bot, colorClass: 'active' },
     { id: 'aianalyzer', name: 'Analisador IA', icon: HeartPulse, colorClass: 'active' },
     { id: 'settings', name: 'Ajustes', icon: Settings, colorClass: 'active' },

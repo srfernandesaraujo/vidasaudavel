@@ -12,7 +12,8 @@ import {
   Apple,
   Sparkles,
   Scale,
-  Send
+  Send,
+  Trophy
 } from 'lucide-react';
 import './Styles/dashboard.css';
 
@@ -560,6 +561,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
             <div className="text-wrapper">
               <span className="title">Análise de Saúde IA</span>
               <span className="subtitle">Verificar riscos e exames sugeridos</span>
+            </div>
+            <ChevronRight size={16} className="arrow" />
+          </button>
+
+          <button className="quick-btn glass-card" onClick={() => setActiveTab('achievements')}>
+            <div className="icon-wrapper purple-bg" style={{ backgroundColor: 'rgba(251, 191, 36, 0.12)' }}>
+              <Trophy size={18} color="var(--accent-gold)" />
+            </div>
+            <div className="text-wrapper">
+              <span className="title">Minhas Conquistas</span>
+              <span className="subtitle">Ver medalhas e evolução do perfil</span>
             </div>
             <ChevronRight size={16} className="arrow" />
           </button>

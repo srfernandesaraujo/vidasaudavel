@@ -9,6 +9,7 @@ import { AICoach } from './components/AICoach';
 import { AIAnalyzer } from './components/AIAnalyzer';
 import { Settings } from './components/Settings';
 import { Auth } from './components/Auth';
+import { Achievements } from './components/Achievements';
 import { auth as firebaseAuth, isFirebaseConfigured } from './utils/firebase';
 import { subscribeToUserFirestore } from './utils/db';
 import { type Unsubscribe } from 'firebase/firestore';
@@ -51,6 +52,64 @@ function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(isFirebaseConfigured);
+  const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'achievement' | 'overload' } | null>(null);
+
+  // Escuta eventos globais de conquistas e sobrecarga progressiva
+  useEffect(() => {
+    let timeoutId: any = null;
+
+    const handleAchievement = (e: Event) => {
+      const ach = (e as CustomEvent).detail;
+      setToastMessage({
+        title: `🏆 Conquista Desbloqueada!`,
+        desc: `Você desbloqueou: "${ach.title}" - ${ach.description}`,
+        type: 'achievement'
+      });
+
+      // Dispara confetes comemorativos
+      import('canvas-confetti').then((confettiModule) => {
+        confettiModule.default({
+          particleCount: 140,
+          spread: 80,
+          origin: { y: 0.35 }
+        });
+      });
+
+      // Auto dismiss após 6 segundos
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setToastMessage(null), 6000);
+    };
+
+    const handleOverload = (e: Event) => {
+      const overload = (e as CustomEvent).detail;
+      setToastMessage({
+        title: `⚡ Sobrecarga Progressiva!`,
+        desc: `Carga de "${overload.exerciseName}" atualizada automaticamente de ${overload.oldWeight}kg para ${overload.newWeight}kg para a próxima semana!`,
+        type: 'overload'
+      });
+
+      // Dispara confetes de sucesso
+      import('canvas-confetti').then((confettiModule) => {
+        confettiModule.default({
+          particleCount: 90,
+          colors: ['#ffd700', '#ffae42', '#3b82f6', '#10b981']
+        });
+      });
+
+      // Auto dismiss após 6 segundos
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setToastMessage(null), 6000);
+    };
+
+    window.addEventListener('vs_achievement_unlocked', handleAchievement);
+    window.addEventListener('vs_progressive_overload_applied', handleOverload);
+
+    return () => {
+      window.removeEventListener('vs_achievement_unlocked', handleAchievement);
+      window.removeEventListener('vs_progressive_overload_applied', handleOverload);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
 
   // Escuta autenticação do Firebase no boot
   useEffect(() => {
@@ -125,6 +184,8 @@ function App() {
         return <AICoach />;
       case 'aianalyzer':
         return <AIAnalyzer key={dbVer} />;
+      case 'achievements':
+        return <Achievements />;
       case 'settings':
         return <Settings key={dbVer} />;
       default:
@@ -163,6 +224,50 @@ function App() {
       <main className="main-content">
         {renderContent()}
       </main>
+
+      {/* Pop-up de Notificação Premium (Toasts) */}
+      {toastMessage && (
+        <div className="premium-toast" style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: toastMessage.type === 'achievement' ? 'linear-gradient(135deg, #7c3aed, #4c1d95)' : 'linear-gradient(135deg, #059669, #064e3b)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          borderRadius: '12px',
+          padding: '1.1rem 1.35rem',
+          color: '#fff',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
+          zIndex: 9999,
+          maxWidth: '360px',
+          backdropFilter: 'blur(8px)',
+          animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          textAlign: 'left',
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'flex-start'
+        }}>
+          <div style={{ flex: 1 }}>
+            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.01em', fontFamily: 'var(--font-heading)' }}>{toastMessage.title}</h4>
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.9, lineHeight: 1.4 }}>{toastMessage.desc}</p>
+          </div>
+          <button 
+            onClick={() => setToastMessage(null)} 
+            style={{ 
+              background: 'transparent', 
+              border: 'none', 
+              color: '#fff', 
+              cursor: 'pointer', 
+              fontSize: '1.2rem', 
+              opacity: 0.6, 
+              padding: 0,
+              lineHeight: 1,
+              marginTop: '-2px'
+            }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 }

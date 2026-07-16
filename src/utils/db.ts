@@ -112,6 +112,17 @@ export interface RaceRegistration {
   isRegistered: boolean;
 }
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
+  progress: number;
+  target: number;
+  type: 'workout_count' | 'run_count' | 'streak' | 'max_pr' | 'pace';
+}
+
 export interface UserSettings {
   userName: string;
   height: number;
@@ -202,6 +213,7 @@ const KEYS = {
   FOOD_LOGS: 'vs_food_logs',
   RUNNING_PLAN: 'vs_running_plan',
   LAST_EMAIL_SENT_WEEK: 'vs_last_email_sent_week',
+  ACHIEVEMENTS: 'vs_achievements',
 };
 
 // Sementes iniciais
@@ -240,6 +252,16 @@ const INITIAL_SETTINGS: UserSettings = {
   carbCyclingMode: 'auto',
   tdeeMode: 'auto',
 };
+
+const INITIAL_ACHIEVEMENTS: Achievement[] = [
+  { id: 'ach-first-workout', title: 'Primeiro Treino', description: 'Realize seu primeiro treino de musculação.', icon: 'Dumbbell', progress: 0, target: 1, type: 'workout_count' },
+  { id: 'ach-workout-10', title: 'Rato de Academia', description: 'Complete 10 treinos de musculação.', icon: 'Award', progress: 0, target: 10, type: 'workout_count' },
+  { id: 'ach-first-run', title: 'Primeiros Passos', description: 'Registre sua primeira corrida.', icon: 'Footprints', progress: 0, target: 1, type: 'run_count' },
+  { id: 'ach-run-10', title: 'Velocista Consistente', description: 'Registre 10 corridas no sistema.', icon: 'Trophy', progress: 0, target: 10, type: 'run_count' },
+  { id: 'ach-heavy-lift', title: 'Força Bruta', description: 'Registre um peso de 100kg ou mais em qualquer exercício.', icon: 'Zap', progress: 0, target: 100, type: 'max_pr' },
+  { id: 'ach-speedy', title: 'Sub-5 Pace', description: 'Corra com um pace abaixo de 05:00 min/km.', icon: 'Flame', progress: 0, target: 5.0, type: 'pace' },
+  { id: 'ach-consistency', title: 'Consistência de Aço', description: 'Treine 3 dias seguidos (musculação ou corrida).', icon: 'Activity', progress: 0, target: 3, type: 'streak' },
+];
 
 const INITIAL_RECIPES: Recipe[] = [
   {
@@ -323,10 +345,46 @@ function getFromStorage<T>(key: string, defaultValue: T): T {
 }
 
 function saveToStorage<T>(key: string, data: T): void {
-  localStorage.setItem(key, JSON.stringify(data));
-  // Dispara evento global para re-renderizar componentes
-  window.dispatchEvent(new Event('vs_database_update'));
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    // Dispara evento global para re-renderizar componentes
+    window.dispatchEvent(new Event('vs_database_update'));
+  } catch (error) {
+    console.error(`Erro ao salvar no localStorage para a chave [${key}]:`, error);
+
+    // Fallback se o limite do localStorage for atingido (geralmente QuotaExceededError)
+    if (key === KEYS.EXERCISES && Array.isArray(data)) {
+      console.warn("Falha de gravação local. Removendo imagens demonstrativas dos exercícios locais para salvar apenas dados textuais...");
+      const cleanedData = data.map(ex => ({ ...ex, image: '' }));
+      try {
+        localStorage.setItem(key, JSON.stringify(cleanedData));
+        window.dispatchEvent(new Event('vs_database_update'));
+        return; // Salvo localmente sem imagens
+      } catch (innerError) {
+        console.error("Falha ao salvar exercícios mesmo após remover as imagens:", innerError);
+      }
+    }
+
+    if (key === KEYS.RECIPES && Array.isArray(data)) {
+      console.warn("Falha de gravação local. Removendo imagens das receitas locais para salvar apenas dados textuais...");
+      const cleanedData = data.map(rec => ({ ...rec, image: '' }));
+      try {
+        localStorage.setItem(key, JSON.stringify(cleanedData));
+        window.dispatchEvent(new Event('vs_database_update'));
+        return; // Salvo localmente sem imagens
+      } catch (innerError) {
+        console.error("Falha ao salvar receitas mesmo após remover as imagens:", innerError);
+      }
+    }
+
+    throw error;
+  }
 }
+
+// -------------------------------------------------------------
+// CACHE EM MEMÓRIA PARA IMAGENS GRANDES (Fallback de estouro de cota do LocalStorage)
+// -------------------------------------------------------------
+const memoryImagesCache: Record<string, string> = {};
 
 // -------------------------------------------------------------
 // SINCRONIZADOR FIRESTORE EM SEGUNDO PLANO
@@ -370,6 +428,7 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
     { subpath: 'meal_plans', key: KEYS.MEAL_PLANS, defaultVal: [] },
     { subpath: 'food_logs', key: KEYS.FOOD_LOGS, defaultVal: [] },
     { subpath: 'running_plans', key: KEYS.RUNNING_PLAN, defaultVal: [] },
+    { subpath: 'achievements', key: KEYS.ACHIEVEMENTS, defaultVal: INITIAL_ACHIEVEMENTS },
   ];
 
   collectionsToSync.forEach(({ subpath, key, defaultVal }) => {
@@ -379,6 +438,23 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
       snapshot.forEach((doc) => {
         data.push(doc.data());
       });
+
+      // Retém as imagens no cache em memória antes do salvamento local para evitar perda por estouro de cota
+      if (key === KEYS.EXERCISES) {
+        data.forEach(ex => {
+          if (ex.id && ex.image) {
+            memoryImagesCache[ex.id] = ex.image;
+          }
+        });
+      }
+      if (key === KEYS.RECIPES) {
+        data.forEach(rec => {
+          if (rec.id && rec.image) {
+            memoryImagesCache[rec.id] = rec.image;
+          }
+        });
+      }
+
       // Se Firestore estiver vazio para treinos/exercícios/receitas, não sobrescreve com array vazio na primeira carga
       if (data.length > 0) {
         saveToStorage(key, data);
@@ -445,17 +521,61 @@ export const db = {
   },
 
   // Exercícios
-  getExercises: (): Exercise[] => getFromStorage(KEYS.EXERCISES, INITIAL_EXERCISES),
+  getExercises: (): Exercise[] => {
+    const exercises = getFromStorage<Exercise[]>(KEYS.EXERCISES, INITIAL_EXERCISES);
+    return exercises.map(ex => ({
+      ...ex,
+      image: ex.image || memoryImagesCache[ex.id] || ''
+    }));
+  },
   saveExercise: (exercise: Exercise): void => {
     const exercises = db.getExercises();
+    
+    // Preserva a imagem se o formulário enviou vazio por limitação local, mas temos na memória
+    const imageToSave = exercise.image || memoryImagesCache[exercise.id] || '';
+    const fullExercise = { ...exercise, image: imageToSave };
+
+    if (imageToSave) {
+      memoryImagesCache[exercise.id] = imageToSave;
+    }
+
     const index = exercises.findIndex(e => e.id === exercise.id);
     if (index >= 0) {
-      exercises[index] = exercise;
+      exercises[index] = fullExercise;
     } else {
-      exercises.push(exercise);
+      exercises.push(fullExercise);
     }
-    saveToStorage(KEYS.EXERCISES, exercises);
-    writeToFirestore('exercises', exercise.id, exercise);
+    
+    // 1. Sempre tenta salvar no banco de dados remoto (Firestore) com todos os dados, incluindo a imagem
+    writeToFirestore('exercises', exercise.id, fullExercise);
+
+    try {
+      // 2. Tenta salvar localmente no localStorage (com imagem)
+      saveToStorage(KEYS.EXERCISES, exercises);
+    } catch (error) {
+      // 3. Fallback: Se falhar localmente (geralmente por tamanho/limite de cota),
+      // salvamos na base local sem a imagem para o app continuar funcionando,
+      // mas mantemos o registro do Firestore intacto com a imagem.
+      console.warn("Estouro de cota local ao salvar exercício. Removendo imagem da persistência local...", error);
+      
+      const cleanExercise = { ...exercise, image: '' };
+      const exercisesWithoutImages = exercises.map(ex => ({
+        ...ex,
+        image: ex.id === exercise.id ? '' : (ex.image || '')
+      }));
+
+      if (index >= 0) {
+        exercisesWithoutImages[index] = cleanExercise;
+      } else {
+        exercisesWithoutImages[exercisesWithoutImages.length - 1] = cleanExercise;
+      }
+
+      try {
+        saveToStorage(KEYS.EXERCISES, exercisesWithoutImages);
+      } catch (retryError) {
+        console.error("Erro ao salvar exercício localmente mesmo sem imagem:", retryError);
+      }
+    }
   },
   deleteExercise: (id: string): void => {
     const exercises = db.getExercises().filter(e => e.id !== id);
@@ -476,20 +596,46 @@ export const db = {
     saveToStorage(KEYS.WORKOUT_LOGS, logs);
     writeToFirestore('workout_logs', newLog.id, newLog);
 
-    // Atualiza PRs
+    // Atualiza PRs e aplica Autopiloto de Sobrecarga Progressiva
     const exercises = db.getExercises();
     let updated = false;
     log.exercises.forEach(loggedEx => {
       const ex = exercises.find(e => e.name === loggedEx.name && e.workoutId === log.workoutId);
-      if (ex && loggedEx.weight > ex.prWeight) {
-        ex.prWeight = loggedEx.weight;
-        updated = true;
-        writeToFirestore('exercises', ex.id, ex);
+      if (ex) {
+        let updatedEx = false;
+        if (loggedEx.weight > ex.prWeight) {
+          ex.prWeight = loggedEx.weight;
+          updatedEx = true;
+        }
+
+        // Se RPE for fornecido e for menor ou igual a 7, aumenta a carga automaticamente
+        if (loggedEx.rpe && loggedEx.rpe <= 7) {
+          const increase = loggedEx.weight >= 60 ? 5 : 2; // +5kg se >= 60kg, senão +2kg
+          const oldW = ex.prWeight || loggedEx.weight;
+          ex.prWeight = oldW + increase;
+          updatedEx = true;
+
+          // Notifica a aplicação sobre o incremento automático
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('vs_progressive_overload_applied', {
+              detail: { exerciseName: ex.name, oldWeight: oldW, newWeight: ex.prWeight }
+            }));
+          }, 150);
+        }
+
+        if (updatedEx) {
+          updated = true;
+          writeToFirestore('exercises', ex.id, ex);
+        }
       }
     });
+
     if (updated) {
       saveToStorage(KEYS.EXERCISES, exercises);
     }
+
+    // Recalcula conquistas
+    db.checkAchievements();
   },
   deleteWorkoutLog: (id: string): void => {
     const logs = db.getWorkoutLogs().filter(l => l.id !== id);
@@ -509,6 +655,9 @@ export const db = {
     logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     saveToStorage(KEYS.RUN_LOGS, logs);
     writeToFirestore('run_logs', newLog.id, newLog);
+
+    // Recalcula conquistas
+    db.checkAchievements();
   },
   deleteRunLog: (id: string): void => {
     const logs = db.getRunLogs().filter(l => l.id !== id);
@@ -592,17 +741,61 @@ export const db = {
   },
 
   // Receitas
-  getRecipes: (): Recipe[] => getFromStorage(KEYS.RECIPES, INITIAL_RECIPES),
+  getRecipes: (): Recipe[] => {
+    const recipes = getFromStorage<Recipe[]>(KEYS.RECIPES, INITIAL_RECIPES);
+    return recipes.map(rec => ({
+      ...rec,
+      image: rec.image || memoryImagesCache[rec.id] || ''
+    }));
+  },
   saveRecipe: (recipe: Recipe): void => {
     const recipes = db.getRecipes();
+
+    // Preserva a imagem se o formulário enviou vazio por limitação local, mas temos na memória
+    const imageToSave = recipe.image || memoryImagesCache[recipe.id] || '';
+    const fullRecipe = { ...recipe, image: imageToSave };
+
+    if (imageToSave) {
+      memoryImagesCache[recipe.id] = imageToSave;
+    }
+
     const index = recipes.findIndex(r => r.id === recipe.id);
     if (index >= 0) {
-      recipes[index] = recipe;
+      recipes[index] = fullRecipe;
     } else {
-      recipes.push(recipe);
+      recipes.push(fullRecipe);
     }
-    saveToStorage(KEYS.RECIPES, recipes);
-    writeToFirestore('recipes', recipe.id, recipe);
+
+    // 1. Sempre tenta salvar no banco de dados remoto (Firestore) com todos os dados, incluindo a imagem
+    writeToFirestore('recipes', recipe.id, fullRecipe);
+
+    try {
+      // 2. Tenta salvar localmente no localStorage (com imagem)
+      saveToStorage(KEYS.RECIPES, recipes);
+    } catch (error) {
+      // 3. Fallback: Se falhar localmente (geralmente por tamanho/limite de cota),
+      // salvamos na base local sem a imagem para o app continuar funcionando,
+      // mas mantemos o registro do Firestore intacto com a imagem.
+      console.warn("Estouro de cota local ao salvar receita. Removendo imagem da persistência local...", error);
+
+      const cleanRecipe = { ...recipe, image: '' };
+      const recipesWithoutImages = recipes.map(r => ({
+        ...r,
+        image: r.id === recipe.id ? '' : (r.image || '')
+      }));
+
+      if (index >= 0) {
+        recipesWithoutImages[index] = cleanRecipe;
+      } else {
+        recipesWithoutImages[recipesWithoutImages.length - 1] = cleanRecipe;
+      }
+
+      try {
+        saveToStorage(KEYS.RECIPES, recipesWithoutImages);
+      } catch (retryError) {
+        console.error("Erro ao salvar receita localmente mesmo sem imagem:", retryError);
+      }
+    }
   },
   deleteRecipe: (id: string): void => {
     const recipes = db.getRecipes().filter(r => r.id !== id);
@@ -651,17 +844,124 @@ export const db = {
   // Planilha de Corrida IA
   getRunningPlan: (): RunningPlan | null => {
     const plans = getFromStorage<RunningPlan[]>(KEYS.RUNNING_PLAN, []);
-    return plans.length > 0 ? plans[0] : null;
+    if (plans.length === 0) return null;
+    // Ordena decrescente pelo createdAt para garantir que o mais recente seja sempre retornado
+    const sorted = [...plans].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return sorted[0];
   },
   saveRunningPlan: (plan: RunningPlan): void => {
     saveToStorage(KEYS.RUNNING_PLAN, [plan]);
-    writeToFirestore('running_plans', plan.id, plan);
+    // Salva com ID fixo 'active' no Firestore para sobrescrever o plano anterior e evitar acumular lixo
+    writeToFirestore('running_plans', 'active', plan);
   },
   deleteRunningPlan: (): void => {
-    const active = db.getRunningPlan();
-    if (active) {
-      saveToStorage(KEYS.RUNNING_PLAN, []);
-      removeFromFirestore('running_plans', active.id);
+    saveToStorage(KEYS.RUNNING_PLAN, []);
+    removeFromFirestore('running_plans', 'active');
+  },
+
+  // Conquistas (Achievements)
+  getAchievements: (): Achievement[] => getFromStorage(KEYS.ACHIEVEMENTS, INITIAL_ACHIEVEMENTS),
+  saveAchievement: (ach: Achievement): void => {
+    const achs = db.getAchievements();
+    const index = achs.findIndex(a => a.id === ach.id);
+    if (index >= 0) {
+      achs[index] = ach;
+    } else {
+      achs.push(ach);
+    }
+    saveToStorage(KEYS.ACHIEVEMENTS, achs);
+    writeToFirestore('achievements', ach.id, ach);
+  },
+  checkAchievements: (): void => {
+    const workouts = db.getWorkoutLogs();
+    const runs = db.getRunLogs();
+    const exercises = db.getExercises();
+
+    // Calcular sequência atual (streak) de dias ativos
+    const dates = new Set<string>();
+    workouts.forEach(l => dates.add(l.date));
+    runs.forEach(l => dates.add(l.date));
+
+    let currentStreak = 0;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const hasActivityRecently = dates.has(todayStr) || dates.has(yesterdayStr);
+    if (hasActivityRecently) {
+      let checkDate = new Date();
+      if (!dates.has(todayStr)) {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (dates.has(dateStr)) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Calcular maior peso (PR)
+    const maxPR = exercises.length > 0 ? Math.max(...exercises.map(e => e.prWeight || 0)) : 0;
+
+    // Calcular melhor pace (menor valor numérico)
+    let bestPace = 999999;
+    runs.forEach(r => {
+      if (r.pace > 0 && r.pace < bestPace) {
+        bestPace = r.pace;
+      }
+    });
+
+    const achs = db.getAchievements();
+    let updatedAny = false;
+
+    const newAchs = achs.map(ach => {
+      let progress = ach.progress;
+      let unlockedAt = ach.unlockedAt;
+
+      if (ach.type === 'workout_count') {
+        progress = workouts.length;
+      } else if (ach.type === 'run_count') {
+        progress = runs.length;
+      } else if (ach.type === 'streak') {
+        progress = currentStreak;
+      } else if (ach.type === 'max_pr') {
+        progress = maxPR;
+      } else if (ach.type === 'pace') {
+        progress = bestPace === 999999 ? 0 : Number(bestPace.toFixed(2));
+      }
+
+      // Verifica se completou
+      const isCompleted = ach.type === 'pace'
+        ? (progress > 0 && progress < ach.target)
+        : progress >= ach.target;
+
+      if (isCompleted && !unlockedAt) {
+        unlockedAt = new Date().toISOString().split('T')[0];
+        updatedAny = true;
+
+        // Dispara evento customizado
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('vs_achievement_unlocked', { detail: { ...ach, unlockedAt } }));
+        }, 150);
+      }
+
+      return {
+        ...ach,
+        progress,
+        unlockedAt
+      };
+    });
+
+    if (updatedAny || JSON.stringify(achs) !== JSON.stringify(newAchs)) {
+      saveToStorage(KEYS.ACHIEVEMENTS, newAchs);
+      newAchs.forEach(ach => {
+        writeToFirestore('achievements', ach.id, ach);
+      });
     }
   }
 };

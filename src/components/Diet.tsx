@@ -21,7 +21,9 @@ import {
   Heart,
   Share2,
   Printer,
-  BookOpen
+  BookOpen,
+  FileJson,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Styles/diet.css';
@@ -555,6 +557,29 @@ export const Diet: React.FC = () => {
 
   // Adicionar Nova Receita Manual
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
+  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+
+  const handleStartEditRecipe = (recipe: Recipe) => {
+    setEditingRecipeId(recipe.id);
+    setNewRecipeForm({
+      title: recipe.title,
+      description: recipe.description || '',
+      rating: recipe.rating || 5,
+      prepTime: String(recipe.prepTime || '15'),
+      cookTime: String(recipe.cookTime || '15'),
+      totalTime: String(recipe.totalTime || '30'),
+      servings: String(recipe.servings || '1'),
+      tags: Array.isArray(recipe.tags) ? recipe.tags.join(', ') : '',
+      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients.join('\n') : '',
+      instructions: Array.isArray(recipe.instructions) ? recipe.instructions.join('\n') : '',
+      image: recipe.image || '',
+      videoUrl: recipe.videoUrl || '',
+      dietaryCategories: Array.isArray(recipe.dietaryCategories) ? recipe.dietaryCategories : [],
+      mealTypes: Array.isArray(recipe.mealTypes) ? recipe.mealTypes : []
+    });
+    setShowAddRecipeModal(true);
+  };
+
   const [newRecipeForm, setNewRecipeForm] = useState({
     title: '',
     description: '',
@@ -670,28 +695,51 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
-    const newRecipe: Recipe = {
-      id: `rec-${Date.now()}`,
+    const recipeData = {
       title: newRecipeForm.title.trim(),
       description: newRecipeForm.description.trim(),
       rating: Number(newRecipeForm.rating) || 5,
       prepTime: Number(newRecipeForm.prepTime) || 15,
       cookTime: Number(newRecipeForm.cookTime) || 15,
-      totalTime: Number(newRecipeForm.totalTime) || 30,
+      totalTime: Number(newRecipeForm.totalTime) || String(Number(newRecipeForm.prepTime || 15) + Number(newRecipeForm.cookTime || 15)),
       servings: Number(newRecipeForm.servings) || 1,
-      lastMade: 'Nunca',
       image: newRecipeForm.image.trim() || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
       ingredients: ingArray,
       instructions: instArray,
       tags: tagsArray,
-      comments: [],
       dietaryCategories: newRecipeForm.dietaryCategories,
       mealTypes: newRecipeForm.mealTypes,
-      videoUrl: newRecipeForm.videoUrl.trim(),
-      isFavorite: false
+      videoUrl: newRecipeForm.videoUrl.trim()
     };
 
-    db.saveRecipe(newRecipe);
+    if (editingRecipeId) {
+      const currentRecipe = recipes.find(r => r.id === editingRecipeId);
+      const updatedRecipe: Recipe = {
+        ...currentRecipe,
+        ...recipeData,
+        id: editingRecipeId,
+        comments: currentRecipe?.comments || [],
+        isFavorite: currentRecipe?.isFavorite || false,
+        lastMade: currentRecipe?.lastMade || 'Nunca'
+      } as Recipe;
+
+      db.saveRecipe(updatedRecipe);
+      setSelectedRecipe(updatedRecipe); // atualiza na tela de detalhes
+      setEditingRecipeId(null);
+      alert('Receita atualizada com sucesso!');
+    } else {
+      const newRecipe: Recipe = {
+        ...recipeData,
+        id: `rec-${Date.now()}`,
+        lastMade: 'Nunca',
+        comments: [],
+        isFavorite: false
+      } as Recipe;
+
+      db.saveRecipe(newRecipe);
+      alert('Receita cadastrada com sucesso!');
+    }
+
     setShowAddRecipeModal(false);
     setNewRecipeForm({
       title: '',
@@ -710,7 +758,133 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
       mealTypes: []
     });
     refreshDietData();
-    alert('Receita cadastrada com sucesso!');
+  };
+
+  const handleJSONUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const rawJson = event.target?.result as string;
+        const parsed = JSON.parse(rawJson);
+
+        // 1. Título
+        const title = parsed.title || parsed.name || '';
+
+        // 2. Descrição
+        const description = parsed.description || parsed.summary || '';
+
+        // 3. Tempos (com regex para limpar texto caso venha "15 minutos")
+        const parseMinutes = (val: any): string => {
+          if (!val) return '15';
+          const match = String(val).match(/\d+/);
+          return match ? match[0] : '15';
+        };
+        const prepTime = parseMinutes(parsed.prepTime || parsed.prep_time);
+        const cookTime = parseMinutes(parsed.cookTime || parsed.cook_time || '0');
+        const totalTime = parseMinutes(parsed.totalTime || parsed.total_time || String(Number(prepTime) + Number(cookTime)));
+
+        // 4. Porções
+        const servingsVal = parsed.servings || parsed.recipe_servings || parsed.recipe_yield || '1';
+        const servings = Number(servingsVal) > 0 ? String(Math.round(Number(servingsVal))) : '1';
+
+        // 5. Tags
+        let tags = '';
+        const rawTags = parsed.tags;
+        if (Array.isArray(rawTags)) {
+          tags = rawTags.map((t: any) => {
+            if (typeof t === 'object' && t !== null) {
+              return t.name || t.title || t.slug || '';
+            }
+            return String(t);
+          }).filter(Boolean).join(', ');
+        } else if (typeof rawTags === 'string') {
+          tags = rawTags;
+        } else {
+          tags = 'Fit';
+        }
+
+        // 6. Imagem
+        const image = parsed.image || '';
+
+        // 7. Video URL
+        const videoUrl = parsed.videoUrl || parsed.video_url || parsed.org_url || '';
+
+        // 8. Categorias Dietéticas
+        let dietaryCategories: string[] = [];
+        const rawCategories = parsed.dietaryCategories || parsed.recipe_category || [];
+        if (Array.isArray(rawCategories)) {
+          dietaryCategories = rawCategories.map((c: any) => {
+            if (typeof c === 'object' && c !== null) {
+              return c.name || c.title || '';
+            }
+            return String(c);
+          }).filter(Boolean);
+        }
+
+        // 9. Tipos de Refeição
+        let mealTypes: string[] = [];
+        const rawMealTypes = parsed.mealTypes || parsed.meal_types || [];
+        if (Array.isArray(rawMealTypes)) {
+          mealTypes = rawMealTypes.map((m: any) => String(m));
+        }
+
+        // 10. Ingredientes (suporta array de objetos ou strings)
+        let ingredientsList: string[] = [];
+        const rawIngredients = parsed.ingredients || parsed.recipe_ingredient || [];
+        if (Array.isArray(rawIngredients)) {
+          ingredientsList = rawIngredients.map((ing: any) => {
+            if (typeof ing === 'object' && ing !== null) {
+              return ing.display || ing.note || ing.text || ing.food || '';
+            }
+            return String(ing);
+          }).filter(Boolean);
+        } else if (typeof rawIngredients === 'string') {
+          ingredientsList = rawIngredients.split('\n');
+        }
+
+        // 11. Instruções (suporta array de objetos ou strings)
+        let instructionsList: string[] = [];
+        const rawInstructions = parsed.instructions || parsed.recipe_instructions || [];
+        if (Array.isArray(rawInstructions)) {
+          instructionsList = rawInstructions.map((inst: any) => {
+            if (typeof inst === 'object' && inst !== null) {
+              return inst.text || inst.description || inst.step || '';
+            }
+            return String(inst);
+          }).filter(Boolean);
+        } else if (typeof rawInstructions === 'string') {
+          instructionsList = rawInstructions.split('\n');
+        }
+
+        // Aplica os valores no formulário do modal
+        setNewRecipeForm({
+          title,
+          description,
+          rating: Number(parsed.rating) || 5,
+          prepTime,
+          cookTime,
+          totalTime,
+          servings,
+          tags,
+          ingredients: ingredientsList.join('\n'),
+          instructions: instructionsList.join('\n'),
+          image,
+          videoUrl,
+          dietaryCategories,
+          mealTypes
+        });
+
+        alert('Receita importada do arquivo JSON com sucesso! Revise as informações abaixo e clique em Gravar.');
+      } catch (err: any) {
+        console.error('Erro ao ler o arquivo JSON de receita:', err);
+        alert(`Erro ao ler o arquivo JSON: ${err.message}. Verifique a estrutura do arquivo.`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleUpdateLastMade = (recipeId: string) => {
@@ -1914,7 +2088,7 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               />
               <Search size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
             </div>
-            <button className="btn btn-accent" onClick={() => setShowAddRecipeModal(true)}>
+            <button className="btn btn-accent" onClick={() => { setEditingRecipeId(null); setShowAddRecipeModal(true); }}>
               <Plus size={16} /> Cadastrar Receita
             </button>
           </div>
@@ -2083,6 +2257,23 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               <BookOpen size={14} />
               <span>Modo Cozinheiro (Tela Cheia)</span>
             </button>
+            <button 
+              type="button" 
+              className="recipe-action-btn" 
+              onClick={() => handleStartEditRecipe(selectedRecipe)}
+            >
+              <Pencil size={14} />
+              <span>Editar Receita</span>
+            </button>
+            <button 
+              type="button" 
+              className="recipe-action-btn" 
+              style={{ color: '#ff6b6b' }}
+              onClick={() => handleDeleteRecipe(selectedRecipe.id)}
+            >
+              <Trash2 size={14} />
+              <span>Excluir Receita</span>
+            </button>
           </div>
 
           {/* Banner de Imagem com botões de overlay */}
@@ -2091,9 +2282,6 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             <div className="recipe-detail-overlay-btns">
               <button className="recipe-overlay-btn" title="Copiar Ingredientes" onClick={copyIngredientsToClipboard}>
                 <Copy size={16} />
-              </button>
-              <button className="recipe-overlay-btn" title="Excluir Receita" style={{ color: '#ff6b6b' }} onClick={() => handleDeleteRecipe(selectedRecipe.id)}>
-                <Trash2 size={16} />
               </button>
             </div>
           </div>
@@ -2680,7 +2868,28 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
       {showAddRecipeModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: '1.25rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', marginBottom: '1rem', textAlign: 'left' }}>Cadastrar Nova Receita</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.25rem', margin: 0, textAlign: 'left', color: '#ffffff' }}>{editingRecipeId ? 'Editar Receita' : 'Cadastrar Nova Receita'}</h3>
+              <div>
+                <input
+                  type="file"
+                  id="recipe-json-upload"
+                  accept=".json"
+                  onChange={handleJSONUpload}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', borderColor: 'rgba(249, 115, 22, 0.3)', color: 'var(--accent-orange)' }}
+                  onClick={() => document.getElementById('recipe-json-upload')?.click()}
+                  title="Importar receita a partir de um arquivo JSON"
+                >
+                  <FileJson size={14} />
+                  Importar JSON
+                </button>
+              </div>
+            </div>
             
             <form onSubmit={handleSaveRecipeManual} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', textAlign: 'left' }}>
               <div className="form-group">
@@ -2849,8 +3058,8 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Gravar Receita</button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddRecipeModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{editingRecipeId ? 'Salvar Alterações' : 'Gravar Receita'}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowAddRecipeModal(false); setEditingRecipeId(null); }}>Cancelar</button>
               </div>
             </form>
           </div>

@@ -1,0 +1,110 @@
+/* Estilos Premium para o Painel de Conquistas */
+
+.progress-circular-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.15);
+  animation: shineGold 3s infinite alternate;
+}
+
+@keyframes shineGold {
+  from {
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.1);
+    border-color: rgba(255, 215, 0, 0.2);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.35);
+    border-color: rgba(255, 215, 0, 0.5);
+  }
+}
+
+/* Medal holders */
+.medal-icon-holder {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease;
+}
+
+.achievement-card:hover .medal-icon-holder {
+  transform: scale(1.1) rotate(5deg);
+}
+
+/* Locked State */
+.medal-locked {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Gradients para cada categoria de conquista */
+.gradient-green {
+  background: linear-gradient(135deg, #10b981, #047857);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.gradient-blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.gradient-gold {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+}
+
+.gradient-orange {
+  background: linear-gradient(135deg, #f97316, #c2410c);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+}
+
+.gradient-purple {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+/* Efeito de card bloqueado vs desbloqueado */
+.achievement-card {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s, box-shadow 0.25s;
+}
+
+.achievement-card.unlocked {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 15px rgba(255, 215, 0, 0.03);
+}
+
+.achievement-card.unlocked:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 215, 0, 0.45) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.08);
+}
+
+.achievement-card.locked {
+  opacity: 0.85;
+}
+
+.achievement-card.locked:hover {
+  transform: translateY(-2px);
+  border-color: #2b2f44;
+  opacity: 1;
+}
+
+/* Animação para surgimento de toasts */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

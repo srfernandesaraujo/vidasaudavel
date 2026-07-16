@@ -78,7 +78,7 @@ class SafeMuscleMap extends React.Component<any, { hasError: boolean }> {
   }
 }
 
-const processImageForTransparency = (base64Str: string, maxSize: number = 800): Promise<string> => {
+const processImageForTransparency = (base64Str: string, maxSize: number = 320): Promise<string> => {
   return new Promise((resolve) => {
     if (!base64Str || !base64Str.startsWith('data:image')) {
       resolve(base64Str);
@@ -292,7 +292,7 @@ export const Workouts: React.FC = () => {
       for (const ex of allExercises) {
         if (ex.image && (ex.image.includes('image/jpeg') || !ex.image.includes('image/png'))) {
           try {
-            const transparentImage = await processImageForTransparency(ex.image, 800);
+            const transparentImage = await processImageForTransparency(ex.image, 320);
             db.saveExercise({
               ...ex,
               image: transparentImage
@@ -398,24 +398,29 @@ export const Workouts: React.FC = () => {
     e.preventDefault();
     if (!exerciseForm.name.trim() || !exerciseForm.workoutId) return;
 
-    db.saveExercise({
-      id: editingExercise ? editingExercise.id : `ex-${Date.now()}`,
-      name: exerciseForm.name.trim(),
-      muscleGroup: exerciseForm.muscleGroup,
-      workoutId: exerciseForm.workoutId,
-      series: Number(exerciseForm.series),
-      repetitions: exerciseForm.repetitions,
-      prWeight: Number(exerciseForm.prWeight),
-      notes: exerciseForm.notes,
-      executionType: exerciseForm.executionType as 'reps' | 'time',
-      instructions: exerciseForm.instructions,
-      image: exerciseForm.image,
-      videoUrl: exerciseForm.videoUrl
-    });
+    try {
+      db.saveExercise({
+        id: editingExercise ? editingExercise.id : `ex-${Date.now()}`,
+        name: exerciseForm.name.trim(),
+        muscleGroup: exerciseForm.muscleGroup,
+        workoutId: exerciseForm.workoutId,
+        series: Number(exerciseForm.series),
+        repetitions: exerciseForm.repetitions,
+        prWeight: Number(exerciseForm.prWeight),
+        notes: exerciseForm.notes,
+        executionType: exerciseForm.executionType as 'reps' | 'time',
+        instructions: exerciseForm.instructions,
+        image: exerciseForm.image,
+        videoUrl: exerciseForm.videoUrl
+      });
 
-    setIsExerciseModalOpen(false);
-    setEditingExercise(null);
-    refreshData();
+      setIsExerciseModalOpen(false);
+      setEditingExercise(null);
+      refreshData();
+    } catch (error: any) {
+      console.error("Erro ao salvar exercício no formulário:", error);
+      alert(`Erro ao salvar exercício: ${error?.message || error}\n\nStack: ${error?.stack || ''}`);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -425,8 +430,8 @@ export const Workouts: React.FC = () => {
       reader.onload = async (event) => {
         const base64Src = event.target?.result as string;
         try {
-          // Processa a imagem para deixá-la transparente e em alta resolução (máx 800px)
-          const transparentPng = await processImageForTransparency(base64Src, 800);
+          // Processa a imagem para deixá-la transparente e em tamanho otimizado para salvamento (máx 320px)
+          const transparentPng = await processImageForTransparency(base64Src, 320);
           setExerciseForm(prev => ({ ...prev, image: transparentPng }));
         } catch (err) {
           console.error('Erro ao processar imagem:', err);
@@ -499,16 +504,12 @@ export const Workouts: React.FC = () => {
       exercises: loggedExercises
     });
 
-    // Atualiza os PRs locais apenas dos exercícios efetivamente executados se a carga anotada for maior que o PR anterior
+    // Verifica se houve novo Recorde Pessoal (PR)
     let isNewPR = false;
     activeWorkoutExs.forEach(ex => {
       const weightLogged = logWeights[ex.id] || 0;
       if (weightLogged > ex.prWeight) {
         isNewPR = true;
-        db.saveExercise({
-          ...ex,
-          prWeight: weightLogged
-        });
       }
     });
 
