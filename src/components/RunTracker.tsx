@@ -13,6 +13,7 @@ import {
   Award,
   Edit2,
   Calendar,
+  CalendarClock,
   List,
   Printer,
   Sparkles,
@@ -169,6 +170,10 @@ export const RunTracker: React.FC = () => {
     runs?: RunLog[];
   } | null>(null);
 
+  // Ajuste de Data Inicial e Drag & Drop
+  const [isStartDateModalOpen, setIsStartDateModalOpen] = useState(false);
+  const [startDateInputValue, setStartDateInputValue] = useState('');
+
   // Formulário para registrar corrida pelo calendário
   const [isLogFromCalendarOpen, setIsLogFromCalendarOpen] = useState(false);
   const [logFromCalendarData, setLogFromCalendarData] = useState({
@@ -184,25 +189,25 @@ export const RunTracker: React.FC = () => {
     const mapping: Record<string, { weekNumber: number; dayIndex: number; day: RunningPlanWeekDay }> = {};
     if (!runningPlan) return mapping;
 
-    // Encontra a segunda-feira da semana de criação do plano para alinhar a Semana 1
     const planDate = new Date(runningPlan.createdAt);
-    const dayOfWeek = planDate.getDay(); // 0 = Domingo, 1 = Segunda, ...
+    const dayOfWeek = planDate.getDay();
     
-    // Calcula a diferença para segunda-feira da semana do plano
-    // Se for domingo (0), a diferença é -6 dias. Caso contrário, é 1 - dayOfWeek.
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
 
     runningPlan.weeks.forEach((week) => {
       week.days.forEach((day, dIdx) => {
-        const d = new Date(mondayOfStartWeek);
-        d.setDate(mondayOfStartWeek.getDate() + ((week.weekNumber - 1) * 7 + dIdx));
+        let dateStr = day.date;
         
-        // Evita problemas de fuso horário construindo a string localmente
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
+        if (!dateStr) {
+          const d = new Date(mondayOfStartWeek);
+          d.setDate(mondayOfStartWeek.getDate() + ((week.weekNumber - 1) * 7 + dIdx));
+          
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          dateStr = `${yyyy}-${mm}-${dd}`;
+        }
         
         mapping[dateStr] = {
           weekNumber: week.weekNumber,
@@ -270,6 +275,104 @@ export const RunTracker: React.FC = () => {
 
     return days;
   }, [currentCalendarMonth]);
+
+  const getDayDateStr = (weekNumber: number, dIdx: number, day: RunningPlanWeekDay) => {
+    if (day.date) return day.date;
+    if (!runningPlan) return '';
+    const planDate = new Date(runningPlan.createdAt);
+    const dayOfWeek = planDate.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
+    const d = new Date(mondayOfStartWeek);
+    d.setDate(mondayOfStartWeek.getDate() + ((weekNumber - 1) * 7 + dIdx));
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const handleDragStart = (e: React.DragEvent, dateStr: string, planInfo: any) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ sourceDate: dateStr, planInfo }));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetDateStr: string) => {
+    e.preventDefault();
+    if (!runningPlan) return;
+
+    try {
+      const dataStr = e.dataTransfer.getData('text/plain');
+      if (!dataStr) return;
+
+      const { sourceDate, planInfo } = JSON.parse(dataStr);
+      if (sourceDate === targetDateStr) return;
+
+      const updatedWeeks = runningPlan.weeks.map(week => {
+        const updatedDays = week.days.map((day, dIdx) => {
+          const originalDateStr = getDayDateStr(week.weekNumber, dIdx, day);
+
+          if (week.weekNumber === planInfo.weekNumber && dIdx === planInfo.dayIndex) {
+            return {
+              ...day,
+              date: targetDateStr
+            };
+          }
+
+          if (originalDateStr === targetDateStr) {
+            return {
+              ...day,
+              date: sourceDate
+            };
+          }
+
+          return day;
+        });
+
+        return { ...week, days: updatedDays };
+      });
+
+      const updatedPlan = {
+        ...runningPlan,
+        weeks: updatedWeeks
+      };
+
+      setRunningPlan(updatedPlan);
+      db.saveRunningPlan(updatedPlan);
+    } catch (err) {
+      console.error('Erro ao processar o drop do treino de corrida:', err);
+    }
+  };
+
+  const handleSaveStartDate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!runningPlan || !startDateInputValue) return;
+
+    const [year, month, day] = startDateInputValue.split('-').map(Number);
+    const newStartDate = new Date(year, month - 1, day);
+    
+    const updatedWeeks = runningPlan.weeks.map(week => {
+      const updatedDays = week.days.map(day => {
+        const { date: _, ...rest } = day;
+        return rest;
+      });
+      return { ...week, days: updatedDays };
+    });
+
+    const updatedPlan: RunningPlan = {
+      ...runningPlan,
+      createdAt: newStartDate.toISOString(),
+      weeks: updatedWeeks
+    };
+
+    setRunningPlan(updatedPlan);
+    db.saveRunningPlan(updatedPlan);
+    
+    setCurrentCalendarMonth(newStartDate);
+    setIsStartDateModalOpen(false);
+  };
 
   const handlePrevMonth = () => {
     setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1));
@@ -1393,6 +1496,18 @@ export const RunTracker: React.FC = () => {
                     type="button"
                     className="plan-action-btn"
                     onClick={() => {
+                      setStartDateInputValue(runningPlan?.createdAt ? new Date(runningPlan.createdAt).toISOString().split('T')[0] : '');
+                      setIsStartDateModalOpen(true);
+                    }}
+                    title="Ajustar data de início de fato da planilha de treino"
+                  >
+                    <CalendarClock size={14} color="#fbbf24" />
+                    Ajustar Início
+                  </button>
+                  <button 
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => {
                       const zonesEl = document.getElementById('cardio-zones-section');
                       if (zonesEl) zonesEl.scrollIntoView({ behavior: 'smooth' });
                     }}
@@ -1549,11 +1664,24 @@ export const RunTracker: React.FC = () => {
                             key={index} 
                             className={`calendar-day-cell ${!slot.isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}`}
                             onClick={() => handleDayClick(slot.dateStr)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, slot.dateStr)}
                           >
                             <span className="calendar-day-number">{slot.date.getDate()}</span>
                             
                             {blockLabel && (
-                              <div className={`calendar-workout-block ${blockClass}`}>
+                              <div 
+                                className={`calendar-workout-block ${blockClass}`}
+                                draggable={blockClass === 'workout-proposto' || blockClass === 'workout-feito' || blockClass === 'workout-perdido'}
+                                onDragStart={(e) => {
+                                  if (planInfo) {
+                                    handleDragStart(e, slot.dateStr, planInfo);
+                                  }
+                                }}
+                                style={{
+                                  cursor: (blockClass === 'workout-proposto' || blockClass === 'workout-feito' || blockClass === 'workout-perdido') ? 'grab' : 'default'
+                                }}
+                              >
                                 {blockLabel}
                               </div>
                             )}
@@ -2533,6 +2661,62 @@ export const RunTracker: React.FC = () => {
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setIsBodyModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Salvar Biometria</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajustar Data de Início */}
+      {isStartDateModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CalendarClock size={18} color="var(--accent-warning)" />
+                Ajustar Data de Início do Plano
+              </h3>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ padding: '0.3rem' }} 
+                onClick={() => setIsStartDateModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveStartDate}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
+                  Ao redefinir a data de início, todos os treinos propostos e dias de descanso da planilha serão reposicionados sequencialmente para as datas futuras correspondentes. Quaisquer ajustes manuais anteriores de arrastar e soltar serão reiniciados para a nova data inicial.
+                </p>
+                <div className="form-group">
+                  <label htmlFor="planStartDate">Nova Data da Primeira Aula</label>
+                  <input
+                    id="planStartDate"
+                    type="date"
+                    className="form-control"
+                    required
+                    value={startDateInputValue}
+                    onChange={(e) => setStartDateInputValue(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setIsStartDateModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  style={{ background: 'var(--accent-warning)', border: 'none', color: '#000', fontWeight: 'bold' }}
+                >
+                  Salvar e Reposicionar
+                </button>
               </div>
             </form>
           </div>

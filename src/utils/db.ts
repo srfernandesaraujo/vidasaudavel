@@ -36,6 +36,7 @@ export interface RunningPlanWeekDay {
   isDone?: boolean;
   objective?: string;
   successCriteria?: string;
+  date?: string;
 }
 
 export interface RunningPlanWeek {
