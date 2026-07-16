@@ -977,4 +977,117 @@ export async function generateRunningPlan(
   });
 }
 
+export async function generateShoppingListWithAI(
+  mealPlans: any[],
+  recipes: any[]
+): Promise<{
+  categories: { name: string; items: string[] }[];
+}> {
+  const settings = db.getSettings();
+  const plannedItems: string[] = [];
+  const recipeIngredients: string[] = [];
+
+  mealPlans.forEach(plan => {
+    plan.meals.forEach((meal: any) => {
+      meal.items.forEach((item: any) => {
+        if (item.recipeId) {
+          const rec = recipes.find(r => r.id === item.recipeId);
+          if (rec && Array.isArray(rec.ingredients)) {
+            recipeIngredients.push(...rec.ingredients);
+          }
+        } else if (item.customName) {
+          plannedItems.push(item.customName);
+        }
+      });
+    });
+  });
+
+  const uniqueRecipeIngredients = Array.from(new Set(recipeIngredients));
+  const uniqueCustomItems = Array.from(new Set(plannedItems));
+
+  const prompt = `Você é um Assistente Nutricional de IA altamente especializado.
+Consolide e agrupe os seguintes itens planejados de refeições e ingredientes de receitas em uma Lista de Compras de Supermercado inteligente e organizada.
+
+INGREDIENTES DE RECEITAS:
+${uniqueRecipeIngredients.join('\n') || 'Nenhum ingrediente de receita cadastrado.'}
+
+ITENS PLANEJADOS AVULSOS:
+${uniqueCustomItems.join('\n') || 'Nenhum item avulso planejado.'}
+
+Organize esses ingredientes e alimentos e agrupe-os estritamente em categorias de supermercado: "Hortifruti" (frutas e vegetais), "Açougue & Peixaria" (carnes, ovos, frango, peixe), "Laticínios & Frios", "Mercearia & Secos" (arroz, aveia, massas, grãos, etc.), "Suplementos & Outros".
+
+Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto de introdução/conclusão:
+{
+  "categories": [
+    {
+      "name": "Nome da Categoria",
+      "items": [
+        "100g de Espinafre fresco"
+      ]
+    }
+  ]
+}`;
+
+  if (settings.apiKey && settings.apiProvider !== 'none') {
+    try {
+      let rawText = '';
+      if (settings.apiProvider === 'gemini') {
+        const enrichedPrompt = `INSTRUÇÕES DO SISTEMA:\nVocê é um gerador de listas de compras em formato JSON. Siga as instruções do usuário estritamente.\n\nPrompt do Usuário: ${prompt}`;
+        rawText = await callGeminiAPI(settings.apiKey, enrichedPrompt, []);
+      } else if (settings.apiProvider === 'openai') {
+        rawText = await callOpenAIAPI(settings.apiKey, prompt, [], 'Você é um gerador de listas de compras em formato JSON.');
+      }
+
+      const cleanJsonStr = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJsonStr);
+      if (parsed && Array.isArray(parsed.categories)) {
+        return parsed;
+      }
+    } catch (err) {
+      console.error('Erro na IA real ao gerar lista de compras:', err);
+    }
+  }
+
+  // Fallback offline
+  const hortifruti: string[] = [];
+  const acougue: string[] = [];
+  const laticinios: string[] = [];
+  const mercearia: string[] = [];
+  const suplementos: string[] = [];
+
+  const categorize = (item: string) => {
+    const lower = item.toLowerCase();
+    if (lower.includes('banana') || lower.includes('morango') || lower.includes('maçã') || lower.includes('uva') || lower.includes('limão') || lower.includes('tomate') || lower.includes('brócolis') || lower.includes('alface') || lower.includes('espinafre') || lower.includes('cebola') || lower.includes('alho') || lower.includes('legume') || lower.includes('batata') || lower.includes('abóbora')) {
+      hortifruti.push(item);
+    } else if (lower.includes('frango') || lower.includes('carne') || lower.includes('bacon') || lower.includes('presunto') || lower.includes('salmão') || lower.includes('peixe') || lower.includes('ovo') || lower.includes('clara')) {
+      acougue.push(item);
+    } else if (lower.includes('queijo') || lower.includes('leite') || lower.includes('iogurte') || lower.includes('cottage') || lower.includes('manteiga') || lower.includes('creme')) {
+      laticinios.push(item);
+    } else if (lower.includes('aveia') || lower.includes('arroz') || lower.includes('pão') || lower.includes('tapioca') || lower.includes('sal') || lower.includes('pimenta') || lower.includes('azeite') || lower.includes('vinagre') || lower.includes('muffin') || lower.includes('grão') || lower.includes('pasta de amendoim')) {
+      mercearia.push(item);
+    } else {
+      suplementos.push(item);
+    }
+  };
+
+  uniqueRecipeIngredients.forEach(categorize);
+  uniqueCustomItems.forEach(categorize);
+
+  if (hortifruti.length === 0 && acougue.length === 0 && laticinios.length === 0 && mercearia.length === 0 && suplementos.length === 0) {
+    acougue.push('4 Ovos inteiros', '60g de Frango desfiado');
+    mercearia.push('2 colheres de sopa de goma de Tapioca', '2 fatias de Pão integral');
+    hortifruti.push('1/2 Tomate picado', '1/4 xícara de Espinafre fresco');
+  }
+
+  const categories = [
+    { name: 'Hortifruti 🥦', items: Array.from(new Set(hortifruti)) },
+    { name: 'Açougue, Peixaria & Ovos 🍗', items: Array.from(new Set(acougue)) },
+    { name: 'Laticínios & Frios 🧀', items: Array.from(new Set(laticinios)) },
+    { name: 'Mercearia & Secos 🌾', items: Array.from(new Set(mercearia)) },
+    { name: 'Suplementos & Outros 💊', items: Array.from(new Set(suplementos)) },
+  ].filter(cat => cat.items.length > 0);
+
+  return { categories };
+}
+
 

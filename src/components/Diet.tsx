@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { db, type Recipe, type MealPlan, type FoodLog, type FoodLogItem, type BodyCompLog } from '../utils/db';
-import { askAINutritionist, askAICoach, parseMealImage, type ChatMessage } from '../utils/aiEngine';
+import { askAINutritionist, askAICoach, parseMealImage, generateShoppingListWithAI, type ChatMessage } from '../utils/aiEngine';
 import { 
   Apple, 
   Calendar, 
@@ -23,7 +23,8 @@ import {
   Printer,
   BookOpen,
   FileJson,
-  Pencil
+  Pencil,
+  Barcode
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import './Styles/diet.css';
@@ -227,11 +228,108 @@ export const Diet: React.FC = () => {
     mealId: 'breakfast'
   });
 
+  const fetchFoodByBarcode = async (barcode: string) => {
+    try {
+      const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      if (!response.ok) {
+        throw new Error('Produto não localizado na base Open Food Facts.');
+      }
+      
+      const data = await response.json();
+      if (data.status !== 1 || !data.product) {
+        alert(`Alimento com código de barras ${barcode} não foi localizado no Open Food Facts.`);
+        return;
+      }
+
+      const product = data.product;
+      const productName = product.product_name || product.product_name_pt || 'Alimento';
+      const nutrients = product.nutriments || {};
+      
+      // Nutrientes por 100g
+      const energyKcal = Math.round(nutrients['energy-kcal_100g'] || (nutrients['energy_100g'] ? nutrients['energy_100g'] * 0.239 : 0));
+      const protein = Math.round(nutrients['proteins_100g'] || 0);
+      const carbs = Math.round(nutrients['carbohydrates_100g'] || 0);
+      const fat = Math.round(nutrients['fat_100g'] || 0);
+
+      setFoodForm(prev => ({
+        ...prev,
+        name: productName,
+        calories: String(energyKcal),
+        protein: String(protein),
+        carbs: String(carbs),
+        fat: String(fat)
+      }));
+
+      alert(`Alimento localizado!\nNome: ${productName} (Ref: 100g)\nMacros: ${energyKcal} kcal | P: ${protein}g | C: ${carbs}g | G: ${fat}g`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao carregar dados do produto: ${err.message || err}`);
+    }
+  };
+
+  const handleBarcodeScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let barcodeValue = '';
+    
+    try {
+      // @ts-ignore
+      if ('BarcodeDetector' in window) {
+        // @ts-ignore
+        const barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((resolve) => { img.onload = resolve; });
+        const symbols = await barcodeDetector.detect(img);
+        if (symbols.length > 0) {
+          barcodeValue = symbols[0].rawValue;
+        }
+      }
+    } catch (detectErr) {
+      console.warn('Erro ao usar BarcodeDetector nativo:', detectErr);
+    }
+
+    if (!barcodeValue) {
+      const typed = prompt("Não conseguimos ler o código de barras da imagem automaticamente. Por favor, digite o número do código de barras (Ex: 7891000053508 para Leite Condensado Moça):");
+      if (typed) {
+        barcodeValue = typed.trim();
+      }
+    }
+
+    if (barcodeValue) {
+      await fetchFoodByBarcode(barcodeValue);
+    }
+    
+    e.target.value = '';
+  };
+
   // Câmera / Escaneador de Pratos por Imagem
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanImage, setScanImage] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanMealId, setScanMealId] = useState('breakfast');
+
+  // Meal Prep / Lista de Compras Inteligente IA
+  const [aiShoppingList, setAiShoppingList] = useState<{ name: string; items: string[] }[] | null>(null);
+  const [aiShoppingLoading, setAiShoppingLoading] = useState(false);
+  const [showAiShoppingModal, setShowAiShoppingModal] = useState(false);
+  const [checkedAiShoppingItems, setCheckedAiShoppingItems] = useState<Record<string, boolean>>({});
+
+  const handleGenerateAIShoppingList = async () => {
+    setAiShoppingLoading(true);
+    setShowAiShoppingModal(true);
+    try {
+      const result = await generateShoppingListWithAI(mealPlans, recipes);
+      setAiShoppingList(result.categories);
+      setCheckedAiShoppingItems({});
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao gerar lista de compras com IA: ' + err.message);
+    } finally {
+      setAiShoppingLoading(false);
+    }
+  };
 
   const handleSaveFoodItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1814,17 +1912,38 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             {showAddFoodForm && (
               <form onSubmit={handleSaveFoodItem} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <h4 style={{ fontSize: '0.9rem', color: '#fff' }}>Registrar Alimento Manual</h4>
-                <div className="form-group">
-                  <label htmlFor="foodName">Nome do Alimento</label>
-                  <input
-                    id="foodName"
-                    type="text"
-                    className="form-control"
-                    placeholder="Ex: Whey com aveia"
-                    value={foodForm.name}
-                    onChange={(e) => setFoodForm({ ...foodForm, name: e.target.value })}
-                    required
-                  />
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                  <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                    <label htmlFor="foodName">Nome do Alimento</label>
+                    <input
+                      id="foodName"
+                      type="text"
+                      className="form-control"
+                      placeholder="Ex: Whey com aveia"
+                      value={foodForm.name}
+                      onChange={(e) => setFoodForm({ ...foodForm, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="file"
+                      id="barcode-image-upload"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleBarcodeScan}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ height: '38px', display: 'flex', alignItems: 'center', gap: '0.35rem', borderColor: 'rgba(249, 115, 22, 0.3)', color: 'var(--accent-orange)' }}
+                      onClick={() => document.getElementById('barcode-image-upload')?.click()}
+                      title="Escanear Código de Barras (imagem do rótulo)"
+                    >
+                      <Barcode size={16} />
+                      <span style={{ fontSize: '0.8rem' }}>Escanear</span>
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                   <div className="form-group">
@@ -2519,9 +2638,14 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
           <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="flex-between">
               <h2 style={{ fontSize: '1.25rem', color: '#fff', textAlign: 'left' }}>Lista de Supermercado Consolidada</h2>
-              <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={handleSendListByEmail}>
-                <Mail size={14} /> Enviar Lista por E-mail
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: 'rgba(249,115,22,0.4)', color: 'var(--accent-orange)', display: 'flex', alignItems: 'center', gap: '0.35rem' }} onClick={handleGenerateAIShoppingList}>
+                  <Bot size={14} /> Gerar com IA
+                </button>
+                <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }} onClick={handleSendListByEmail}>
+                  <Mail size={14} /> Enviar Lista por E-mail
+                </button>
+              </div>
             </div>
 
             {/* Input para adição manual */}
@@ -2859,6 +2983,110 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleAddMealItem}>Adicionar Item</button>
               <button className="btn btn-secondary" onClick={() => setShowAddMealModal(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LISTA DE COMPRAS INTELIGENTE IA */}
+      {showAiShoppingModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-orange)' }}>
+                <Bot size={20} />
+                Lista de Compras Semanal (IA)
+              </h3>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '0.3rem' }} 
+                onClick={() => setShowAiShoppingModal(false)}
+                disabled={aiShoppingLoading}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              {aiShoppingLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '3rem 0' }}>
+                  <div className="scan-progress-bar" style={{ width: '80%' }}>
+                    <div className="scan-progress-fill" />
+                  </div>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--accent-orange)', fontWeight: 'bold', textAlign: 'center' }}>
+                    IA consolidando refeições e agrupando ingredientes por setor...
+                  </span>
+                </div>
+              ) : aiShoppingList && aiShoppingList.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'left' }}>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Aqui está a sua lista consolidada e categorizada de forma inteligente pela Inteligência Artificial do Vida Saudável:
+                  </p>
+                  
+                  {aiShoppingList.map((category, catIdx) => (
+                    <div key={catIdx} style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '1rem' }}>
+                      <h4 style={{ fontSize: '0.9rem', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.4rem', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {category.name}
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {category.items.map((item, itemIdx) => {
+                          const key = `${catIdx}-${itemIdx}`;
+                          const isChecked = !!checkedAiShoppingItems[key];
+                          return (
+                            <label 
+                              key={itemIdx} 
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.6rem', 
+                                cursor: 'pointer',
+                                textDecoration: isChecked ? 'line-through' : 'none',
+                                opacity: isChecked ? 0.4 : 1,
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              <input 
+                                type="checkbox" 
+                                checked={isChecked}
+                                onChange={() => setCheckedAiShoppingItems(prev => ({ ...prev, [key]: !isChecked }))}
+                              />
+                              <span>{item}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-accent" 
+                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                      onClick={() => {
+                        const txt = aiShoppingList.map(cat => {
+                          return `*${cat.name}*\n` + cat.items.map(item => `[ ] ${item}`).join('\n');
+                        }).join('\n\n');
+                        navigator.clipboard.writeText(txt);
+                        alert('Lista de compras copiada para a área de transferência! Cole no seu WhatsApp ou Notas.');
+                      }}
+                    >
+                      <Copy size={14} /> Copiar para Celular
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowAiShoppingModal(false)}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
+                  Não foi possível processar a lista de compras. Verifique seu planejamento semanal.
+                </div>
+              )}
             </div>
           </div>
         </div>
