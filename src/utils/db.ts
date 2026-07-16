@@ -135,6 +135,8 @@ export interface UserSettings {
   resendFromEmail?: string;
   carbCyclingMode?: 'none' | 'auto';
   tdeeMode?: 'none' | 'auto';
+  dailyDietEmailEnabled?: boolean;
+  dailyDietEmailTime?: string;
 }
 
 export interface Recipe {
@@ -251,6 +253,8 @@ const INITIAL_SETTINGS: UserSettings = {
   resendFromEmail: '',
   carbCyclingMode: 'auto',
   tdeeMode: 'auto',
+  dailyDietEmailEnabled: false,
+  dailyDietEmailTime: '06:00',
 };
 
 const INITIAL_ACHIEVEMENTS: Achievement[] = [

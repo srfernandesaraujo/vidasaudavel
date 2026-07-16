@@ -1,15 +1,37 @@
 import React, { useState } from 'react';
 import { db, type UserSettings } from '../utils/db';
-import { Settings as SettingsIcon, Save, Key, ShieldAlert, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Key, ShieldAlert, Sparkles, Mail } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, firestore } from '../utils/firebase';
 
 export const Settings: React.FC = () => {
   const [settings, setSettings] = useState<UserSettings>(db.getSettings());
   const [showKey, setShowKey] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     db.saveSettings(settings);
+
+    try {
+      const uid = auth?.currentUser?.uid;
+      if (uid && firestore) {
+        const regDocRef = doc(firestore, 'registered_daily_emails', uid);
+        await setDoc(regDocRef, {
+          uid,
+          email: settings.emailForList || '',
+          resendApiKey: settings.resendApiKey || '',
+          resendFromEmail: settings.resendFromEmail || '',
+          dailyEmailTime: settings.dailyDietEmailTime || '06:00',
+          dailyEmailEnabled: !!settings.dailyDietEmailEnabled,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo',
+          lastSentDate: ''
+        }, { merge: true });
+      }
+    } catch (syncErr) {
+      console.warn('Erro ao salvar agendamento de email no Firestore:', syncErr);
+    }
+
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
@@ -205,6 +227,42 @@ export const Settings: React.FC = () => {
               value={settings.resendApiKey || ''}
               onChange={(e) => setSettings({ ...settings, resendApiKey: e.target.value })}
             />
+          </div>
+        </div>
+
+        {/* Email Diário do Cardápio Semanal */}
+        <div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '1.5rem' }}>
+            <Mail size={16} color="var(--accent-blue)" />
+            Envio Diário do Cardápio por E-mail
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+            Receba todas as manhãs um e-mail com as suas refeições planejadas para o dia, incluindo lista de ingredientes e modo de preparo de receitas.
+          </p>
+
+          <div className="grid-cols-2">
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px', marginTop: '1.5rem' }}>
+              <input
+                id="setDailyEmailEnabled"
+                type="checkbox"
+                checked={!!settings.dailyDietEmailEnabled}
+                onChange={(e) => setSettings({ ...settings, dailyDietEmailEnabled: e.target.checked })}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <label htmlFor="setDailyEmailEnabled" style={{ marginBottom: 0, cursor: 'pointer', fontWeight: 600 }}>Ativar E-mail Diário do Cardápio</label>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="setDailyEmailTime">Horário de Envio (Fuso Horário Local)</label>
+              <input
+                id="setDailyEmailTime"
+                type="time"
+                className="form-control"
+                value={settings.dailyDietEmailTime || '06:00'}
+                onChange={(e) => setSettings({ ...settings, dailyDietEmailTime: e.target.value })}
+                disabled={!settings.dailyDietEmailEnabled}
+              />
+            </div>
           </div>
         </div>
 

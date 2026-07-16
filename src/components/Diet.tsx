@@ -46,6 +46,104 @@ const MEAL_TYPES = [
   { id: 'jantar', name: 'Jantar' }
 ];
 
+function buildDailyDietEmailHtml(dateStr: string, plan: any, recipes: any[], userName: string): string {
+  const dateObj = new Date(dateStr + 'T00:00:00');
+  const formattedDate = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  let mealsHtml = '';
+  const mealOrder = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const orderedMeals = [...plan.meals].sort((a, b) => mealOrder.indexOf(a.id) - mealOrder.indexOf(b.id));
+
+  orderedMeals.forEach(meal => {
+    if (!meal.items || meal.items.length === 0) return;
+
+    let itemsHtml = '';
+    meal.items.forEach((item: any) => {
+      const recipe = item.recipeId ? recipes.find((r: any) => r.id === item.recipeId) : null;
+
+      if (recipe) {
+        const ingredientsList = (recipe.ingredients || []).map((ing: string) => `<li style="margin-bottom: 4px; color: #4b5563;">${ing}</li>`).join('');
+        const instructionsList = (recipe.instructions || []).map((inst: string) => `<li style="margin-bottom: 6px; color: #4b5563; line-height: 1.5;">${inst}</li>`).join('');
+
+        itemsHtml += `
+          <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #1f2937; font-size: 14px; font-weight: 700;">🍳 ${recipe.title}</h4>
+              <span style="background-color: #ffedd5; color: #ea580c; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${item.calories || recipe.calories || 0} Kcal</span>
+            </div>
+            <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px; font-style: italic;">${recipe.description || ''}</p>
+            
+            <div style="margin-bottom: 12px;">
+              <h5 style="margin: 0 0 6px 0; color: #374151; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Ingredientes</h5>
+              <ul style="margin: 0; padding-left: 20px; font-size: 13px;">
+                ${ingredientsList}
+              </ul>
+            </div>
+
+            <div>
+              <h5 style="margin: 0 0 6px 0; color: #374151; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Modo de Preparo</h5>
+              <ol style="margin: 0; padding-left: 20px; font-size: 13px;">
+                ${instructionsList}
+              </ol>
+            </div>
+          </div>
+        `;
+      } else {
+        itemsHtml += `
+          <div style="background-color: #fcfcfc; border: 1px dashed #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #374151; font-size: 13px; font-weight: 600;">🍎 ${item.customName || 'Alimento Avulso'}</span>
+            <span style="background-color: #f3f4f6; color: #4b5563; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">${item.calories || 0} Kcal</span>
+          </div>
+        `;
+      }
+    });
+
+    mealsHtml += `
+      <div style="margin-bottom: 24px; border-bottom: 1px solid #f3f4f6; padding-bottom: 16px;">
+        <h3 style="margin: 0 0 12px 0; color: #ea580c; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">🍽️ ${meal.name}</h3>
+        ${itemsHtml}
+      </div>
+    `;
+  });
+
+  if (!mealsHtml) {
+    mealsHtml = `<p style="color: #6b7280; font-style: italic; text-align: center; padding: 20px 0;">Nenhuma refeição planejada para hoje.</p>`;
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Cardápio de Hoje - Vida Saudável</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f3f4f6; -webkit-font-smoothing: antialiased;">
+      <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+        <div style="background: linear-gradient(135deg, #f97316, #ea580c); padding: 30px 40px; text-align: center;">
+          <h1 style="margin: 0 0 8px 0; color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">VIDA SAUDÁVEL</h1>
+          <h2 style="margin: 0; color: #ffedd5; font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Seu Cardápio Diário</h2>
+        </div>
+        <div style="padding: 40px;">
+          <p style="margin: 0 0 24px 0; color: #1f2937; font-size: 16px; line-height: 1.5; font-weight: 500;">
+            Olá, <strong>${userName}</strong>!
+          </p>
+          <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 14px; line-height: 1.5;">
+            Aqui está o seu planejamento alimentar completo para hoje, <strong>${formattedDate}</strong>:
+          </p>
+          ${mealsHtml}
+          <div style="margin-top: 30px; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 20px;">
+            <p style="margin: 0; color: #f97316; font-size: 14px; font-weight: 700;">💪 Foco na dieta e bons treinos hoje!</p>
+          </div>
+        </div>
+        <div style="background-color: #f9fafb; padding: 20px 40px; text-align: center; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af;">
+          <p style="margin: 0 0 4px 0;">Vida Saudável © 2026. Todos os direitos reservados.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export const Diet: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'daily' | 'planner' | 'recipes' | 'import' | 'shopping' | 'nutri_ai'>('daily');
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -1423,6 +1521,65 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
     });
   };
 
+  const handleSendDailyEmailManual = async () => {
+    const settings = db.getSettings();
+    if (!settings.emailForList) {
+      alert('Por favor, configure o seu e-mail de destino nas Configurações do Sistema.');
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayPlan = mealPlans.find(p => p.date === todayStr);
+
+    if (!todayPlan || todayPlan.meals.every(m => m.items.length === 0)) {
+      alert('Nenhum planejamento alimentar localizado para hoje no cardápio semanal.');
+      return;
+    }
+
+    const emailSubject = `Vida Saudável 🍽️ - Cardápio de Hoje: ${new Date().toLocaleDateString('pt-BR')}`;
+    const emailHtml = buildDailyDietEmailHtml(todayStr, todayPlan, recipes, settings.userName);
+
+    if (settings.resendApiKey) {
+      try {
+        const fromEmail = settings.resendFromEmail || 'onboarding@resend.dev';
+        const formattedFrom = fromEmail.includes('<') ? fromEmail : `Vida Saudável <${fromEmail}>`;
+
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.resendApiKey}`
+          },
+          body: JSON.stringify({
+            from: formattedFrom,
+            to: settings.emailForList,
+            subject: emailSubject,
+            text: `Olá ${settings.userName}! Aqui está seu cardápio de hoje. Por favor abra o e-mail em um cliente compatível com HTML.`,
+            html: emailHtml
+          })
+        });
+
+        if (res.ok) {
+          alert('Cardápio de hoje enviado para o seu e-mail com sucesso!');
+        } else {
+          const errBody = await res.text();
+          alert(`Erro ao enviar via Resend: ${errBody}`);
+        }
+      } catch (err: any) {
+        alert(`Erro de conexão: ${err.message}`);
+      }
+    } else {
+      const textVersion = todayPlan.meals.map(m => {
+        if (m.items.length === 0) return '';
+        return `\n*${m.name}*\n` + m.items.map(i => `- ${i.recipeId ? recipes.find(r => r.id === i.recipeId)?.title : i.customName} (${i.calories} Kcal)`).join('\n');
+      }).join('\n');
+      
+      const mailtoUrl = `mailto:${encodeURIComponent(settings.emailForList)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent('Cardápio de hoje:\n' + textVersion)}`;
+      window.open(mailtoUrl, '_blank');
+      alert('Como você não possui chave do Resend configurada, abrimos o cliente de email local.');
+    }
+  };
+
   const handleSendListByEmail = async () => {
     if (!settings.emailForList) {
       alert('Por favor, configure o seu e-mail nas Configurações do Sistema.');
@@ -2104,7 +2261,10 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button className="btn btn-secondary" onClick={handleConsumeDayPlan} style={{ color: 'var(--accent-emerald)', borderColor: 'rgba(16,185,129,0.2)' }}>
+              <button className="btn btn-secondary" onClick={handleSendDailyEmailManual} style={{ color: 'var(--accent-blue)', borderColor: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', gap: '0.35rem' }} title="Enviar cardápio de hoje por e-mail imediatamente">
+                <Mail size={14} /> Enviar Cardápio por E-mail
+              </button>
+              <button className="btn btn-secondary" onClick={handleConsumeDayPlan} style={{ color: 'var(--accent-emerald)', borderColor: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Check size={14} /> Consumir Refeições de Hoje
               </button>
             </div>
