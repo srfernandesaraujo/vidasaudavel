@@ -2670,42 +2670,44 @@ export const RunTracker: React.FC = () => {
       {/* Modal Ajustar Data de Início */}
       {isStartDateModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <CalendarClock size={18} color="var(--accent-warning)" />
+          <div className="modal-content" style={{ maxWidth: '400px', background: '#131520', border: '1px solid #1f2232' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #1f2232', paddingBottom: '0.75rem' }}>
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ffffff' }}>
+                <CalendarClock size={18} color="var(--accent-orange)" />
                 Ajustar Data de Início do Plano
               </h3>
               <button 
                 type="button" 
                 className="btn btn-secondary" 
-                style={{ padding: '0.3rem' }} 
+                style={{ padding: '0.3rem', color: '#ffffff', borderColor: 'transparent', background: 'transparent' }} 
                 onClick={() => setIsStartDateModalOpen(false)}
               >
                 <X size={16} />
               </button>
             </div>
             <form onSubmit={handleSaveStartDate}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left', paddingTop: '1.25rem' }}>
+                <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: 0, lineHeight: 1.5 }}>
                   Ao redefinir a data de início, todos os treinos propostos e dias de descanso da planilha serão reposicionados sequencialmente para as datas futuras correspondentes. Quaisquer ajustes manuais anteriores de arrastar e soltar serão reiniciados para a nova data inicial.
                 </p>
                 <div className="form-group">
-                  <label htmlFor="planStartDate">Nova Data da Primeira Aula</label>
+                  <label htmlFor="planStartDate" style={{ color: '#ffffff', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem', display: 'block' }}>Nova Data da Primeira Aula</label>
                   <input
                     id="planStartDate"
                     type="date"
                     className="form-control"
                     required
+                    style={{ background: '#1c1e2d', color: '#ffffff', border: '1px solid #2d3142' }}
                     value={startDateInputValue}
                     onChange={(e) => setStartDateInputValue(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid #1f2232', paddingTop: '1.25rem' }}>
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
+                  style={{ color: '#ffffff', borderColor: '#2d3142', background: 'transparent' }}
                   onClick={() => setIsStartDateModalOpen(false)}
                 >
                   Cancelar
@@ -2713,7 +2715,7 @@ export const RunTracker: React.FC = () => {
                 <button 
                   type="submit" 
                   className="btn btn-primary"
-                  style={{ background: 'var(--accent-warning)', border: 'none', color: '#000', fontWeight: 'bold' }}
+                  style={{ background: 'linear-gradient(90deg, #f97316, #ea580c)', border: 'none', color: '#ffffff', fontWeight: 'bold' }}
                 >
                   Salvar e Reposicionar
                 </button>
