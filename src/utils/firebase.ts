@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -22,6 +23,7 @@ export const isFirebaseConfigured = !!(
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let firestore: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 const googleProvider = new GoogleAuthProvider();
 
 // Configura o provider do Google para solicitar seleção de conta
@@ -34,10 +36,11 @@ if (isFirebaseConfigured) {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     firestore = getFirestore(app);
+    storage = getStorage(app);
   } catch (error) {
     console.error('Falha ao inicializar o SDK do Firebase:', error);
   }
 }
 
-export { auth, firestore, googleProvider };
+export { auth, firestore, storage, googleProvider };
 export default app;

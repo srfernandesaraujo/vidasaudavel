@@ -203,6 +203,11 @@ export interface FoodLog {
   items: FoodLogItem[];
 }
 
+export interface ChatMessageRecord {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 const KEYS = {
   WORKOUTS: 'vs_workouts',
   EXERCISES: 'vs_exercises',
@@ -217,6 +222,7 @@ const KEYS = {
   RUNNING_PLAN: 'vs_running_plan',
   LAST_EMAIL_SENT_WEEK: 'vs_last_email_sent_week',
   ACHIEVEMENTS: 'vs_achievements',
+  NUTRI_CHAT: 'vs_nutri_chat',
 };
 
 // Sementes iniciais
@@ -484,6 +490,15 @@ export function subscribeToUserFirestore(uid: string): Unsubscribe[] {
   });
   unsubscribes.push(unsubSettings);
 
+  // Sync do histórico de conversas com a Nutricionista IA
+  const nutriChatDocRef = doc(firestore, 'users', uid, 'ai_chats', 'nutritionist');
+  const unsubNutriChat = onSnapshot(nutriChatDocRef, (docSnap) => {
+    if (docSnap.exists() && Array.isArray(docSnap.data().messages)) {
+      saveToStorage(KEYS.NUTRI_CHAT, docSnap.data().messages);
+    }
+  });
+  unsubscribes.push(unsubNutriChat);
+
   return unsubscribes;
 }
 
@@ -496,6 +511,13 @@ export const db = {
   saveSettings: (settings: UserSettings): void => {
     saveToStorage(KEYS.SETTINGS, settings);
     writeToFirestore('settings', 'general', settings);
+  },
+
+  // Histórico de conversas com a Nutricionista IA
+  getNutriChatHistory: (): ChatMessageRecord[] => getFromStorage(KEYS.NUTRI_CHAT, []),
+  saveNutriChatHistory: (messages: ChatMessageRecord[]): void => {
+    saveToStorage(KEYS.NUTRI_CHAT, messages);
+    writeToFirestore('ai_chats', 'nutritionist', { messages });
   },
 
   // Treinos

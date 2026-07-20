@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db, type Recipe, type MealPlan, type FoodLog, type FoodLogItem, type BodyCompLog } from '../utils/db';
-import { askAINutritionist, askAICoach, parseMealImage, generateShoppingListWithAI, type ChatMessage } from '../utils/aiEngine';
+import { askAINutritionist, askAICoach, parseMealImage, generateShoppingListWithAI, estimateFoodMacros, extractRecipesFromSuggestion, type ChatMessage, type RecipeDraft } from '../utils/aiEngine';
+import { uploadRecipeImage } from '../utils/storage';
 import { 
   Apple, 
   Calendar, 
@@ -172,7 +173,18 @@ function buildDailyDietEmailHtml(dateStr: string, plan: any, recipes: any[], use
 }
 
 export const Diet: React.FC = () => {
-  const [activeSubTab, setActiveSubTab] = useState<'daily' | 'planner' | 'recipes' | 'import' | 'shopping' | 'nutri_ai'>('daily');
+  type DietSubTab = 'daily' | 'planner' | 'recipes' | 'import' | 'shopping' | 'nutri_ai';
+  const DIET_SUBTABS: DietSubTab[] = ['daily', 'planner', 'recipes', 'import', 'shopping', 'nutri_ai'];
+  const [activeSubTab, setActiveSubTab] = useState<DietSubTab>(() => {
+    const saved = sessionStorage.getItem('vs_diet_active_subtab') as DietSubTab | null;
+    return saved && DIET_SUBTABS.includes(saved) ? saved : 'daily';
+  });
+
+  // Preserva a aba ativa entre os remounts que ocorrem sempre que qualquer gravação
+  // é feita no banco local (ver App.tsx, que remonta <Diet key={dbVer}/> a cada escrita)
+  useEffect(() => {
+    sessionStorage.setItem('vs_diet_active_subtab', activeSubTab);
+  }, [activeSubTab]);
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [recipes, setRecipes] = useState<Recipe[]>(db.getRecipes());
   const [mealPlans, setMealPlans] = useState<MealPlan[]>(db.getMealPlans());
@@ -606,26 +618,34 @@ export const Diet: React.FC = () => {
   // CARDÁPIO / PLANEJADOR SEMANAL
   // -------------------------------------------------------------
   const [selectedDayOffset, setSelectedDayOffset] = useState<number>(0);
-  
-  // Obtém o intervalo de quarta a terça-feira correspondente à Imagem 4
-  const plannerDates = useMemo(() => {
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 = Dom, 1 = Seg ...
-    
-    // Começa na quarta-feira (3). Calcula diferença para obter a quarta-feira desta semana
-    let diffToWednesday = 3 - dayOfWeek;
-    // Se for antes de quarta, puxa a quarta da semana passada para mostrar a atual
-    const startWednesday = new Date(today);
-    startWednesday.setDate(today.getDate() + diffToWednesday);
 
+  // A semana exibida sempre começa na data de hoje por padrão; o usuário pode
+  // escolher manualmente outra "Data de início" através do seletor na tela.
+  const [plannerStartDate, setPlannerStartDate] = useState<Date>(() => new Date());
+
+  const plannerDates = useMemo(() => {
     const dates = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(startWednesday);
-      d.setDate(startWednesday.getDate() + i);
+      const d = new Date(plannerStartDate);
+      d.setDate(plannerStartDate.getDate() + i);
       dates.push(d);
     }
     return dates;
-  }, []);
+  }, [plannerStartDate]);
+
+  const handlePlannerStartDateChange = (isoDate: string) => {
+    if (!isoDate) return;
+    const [year, month, day] = isoDate.split('-').map(Number);
+    setPlannerStartDate(new Date(year, month - 1, day));
+    setSelectedDayOffset(0);
+  };
+
+  const formatDateInputValue = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   const selectedDateStr = useMemo(() => {
     const d = plannerDates[selectedDayOffset];
@@ -657,49 +677,90 @@ export const Diet: React.FC = () => {
     carbs: '',
     fat: ''
   });
+  const [estimatingMacros, setEstimatingMacros] = useState(false);
+
+  // Datas (YYYY-MM-DD) selecionadas para repetir o mesmo item no mesmo tipo de refeição
+  const [repeatOnDays, setRepeatOnDays] = useState<string[]>([]);
+
+  const toggleRepeatDay = (dateStr: string) => {
+    setRepeatOnDays(prev => prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr]);
+  };
+
+  const handleAutoFillMacros = async () => {
+    const name = customMealForm.name.trim();
+    if (!name) return;
+    setEstimatingMacros(true);
+    try {
+      const macros = await estimateFoodMacros(name);
+      setCustomMealForm(prev => ({
+        name: prev.name,
+        calories: prev.calories.trim() === '' ? String(macros.calories) : prev.calories,
+        protein: prev.protein.trim() === '' ? String(macros.protein) : prev.protein,
+        carbs: prev.carbs.trim() === '' ? String(macros.carbs) : prev.carbs,
+        fat: prev.fat.trim() === '' ? String(macros.fat) : prev.fat
+      }));
+    } catch (err) {
+      console.error('Erro ao estimar macros do alimento:', err);
+    } finally {
+      setEstimatingMacros(false);
+    }
+  };
+
+  const buildMealItem = () => {
+    if (mealSelectionType === 'recipe') {
+      const rec = recipes.find(r => r.id === selectedRecipeId);
+      if (!rec) return null;
+      return {
+        recipeId: rec.id,
+        customName: rec.title,
+        calories: rec.id === 'rec-1' ? 420 : rec.id === 'rec-2' ? 240 : 300, // calorias estimadas para sementes
+        protein: rec.id === 'rec-1' ? 32 : rec.id === 'rec-2' ? 24 : 20,
+        carbs: rec.id === 'rec-1' ? 20 : rec.id === 'rec-2' ? 8 : 15,
+        fat: rec.id === 'rec-1' ? 22 : rec.id === 'rec-2' ? 12 : 10
+      };
+    }
+    if (!customMealForm.name.trim()) return null;
+    return {
+      customName: customMealForm.name.trim(),
+      calories: Number(customMealForm.calories) || 0,
+      protein: Number(customMealForm.protein) || 0,
+      carbs: Number(customMealForm.carbs) || 0,
+      fat: Number(customMealForm.fat) || 0
+    };
+  };
+
+  const getOrCreatePlanForDate = (dateStr: string): MealPlan => {
+    return mealPlans.find(p => p.date === dateStr) || {
+      id: dateStr,
+      date: dateStr,
+      meals: [
+        { id: 'breakfast', name: 'Café da Manhã', items: [] },
+        { id: 'lunch', name: 'Almoço', items: [] },
+        { id: 'dinner', name: 'Jantar', items: [] },
+        { id: 'snack', name: 'Lanches', items: [] }
+      ]
+    };
+  };
+
+  const addItemToPlan = (plan: MealPlan, item: NonNullable<ReturnType<typeof buildMealItem>>): MealPlan => ({
+    ...plan,
+    meals: plan.meals.map(m => m.id === activeMealId ? { ...m, items: [...m.items, item] } : m)
+  });
 
   const handleAddMealItem = () => {
-    const updatedMeals = selectedDayPlan.meals.map(m => {
-      if (m.id === activeMealId) {
-        if (mealSelectionType === 'recipe') {
-          const rec = recipes.find(r => r.id === selectedRecipeId);
-          if (!rec) return m;
-          return {
-            ...m,
-            items: [...m.items, {
-              recipeId: rec.id,
-              customName: rec.title,
-              calories: rec.id === 'rec-1' ? 420 : rec.id === 'rec-2' ? 240 : 300, // calorias estimadas para sementes
-              protein: rec.id === 'rec-1' ? 32 : rec.id === 'rec-2' ? 24 : 20,
-              carbs: rec.id === 'rec-1' ? 20 : rec.id === 'rec-2' ? 8 : 15,
-              fat: rec.id === 'rec-1' ? 22 : rec.id === 'rec-2' ? 12 : 10
-            }]
-          };
-        } else {
-          if (!customMealForm.name.trim()) return m;
-          return {
-            ...m,
-            items: [...m.items, {
-              customName: customMealForm.name.trim(),
-              calories: Number(customMealForm.calories) || 0,
-              protein: Number(customMealForm.protein) || 0,
-              carbs: Number(customMealForm.carbs) || 0,
-              fat: Number(customMealForm.fat) || 0
-            }]
-          };
-        }
-      }
-      return m;
+    const item = buildMealItem();
+    if (!item) return;
+
+    db.saveMealPlan(addItemToPlan(selectedDayPlan, item));
+
+    repeatOnDays.forEach(dateStr => {
+      if (dateStr === selectedDateStr) return;
+      db.saveMealPlan(addItemToPlan(getOrCreatePlanForDate(dateStr), item));
     });
 
-    const newPlan: MealPlan = {
-      ...selectedDayPlan,
-      meals: updatedMeals
-    };
-
-    db.saveMealPlan(newPlan);
     setShowAddMealModal(false);
     setCustomMealForm({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+    setRepeatOnDays([]);
     refreshDietData();
   };
 
@@ -781,9 +842,31 @@ export const Diet: React.FC = () => {
   // Adicionar Nova Receita Manual
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+  // Id provisório usado para nomear a imagem no Storage antes da receita ser salva
+  const [pendingRecipeId, setPendingRecipeId] = useState<string>('');
+  const [uploadingRecipeImage, setUploadingRecipeImage] = useState(false);
+  const [recipeImageUploadError, setRecipeImageUploadError] = useState('');
+
+  const handleRecipeImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setRecipeImageUploadError('');
+    setUploadingRecipeImage(true);
+    try {
+      const url = await uploadRecipeImage(file, pendingRecipeId || `rec-${Date.now()}`);
+      setNewRecipeForm(prev => ({ ...prev, image: url }));
+    } catch (err: any) {
+      console.error('Erro ao enviar imagem da receita:', err);
+      setRecipeImageUploadError(err.message || 'Erro ao enviar a imagem.');
+    } finally {
+      setUploadingRecipeImage(false);
+    }
+  };
 
   const handleStartEditRecipe = (recipe: Recipe) => {
     setEditingRecipeId(recipe.id);
+    setPendingRecipeId(recipe.id);
     setNewRecipeForm({
       title: recipe.title,
       description: recipe.description || '',
@@ -953,7 +1036,7 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
     } else {
       const newRecipe: Recipe = {
         ...recipeData,
-        id: `rec-${Date.now()}`,
+        id: pendingRecipeId || `rec-${Date.now()}`,
         lastMade: 'Nunca',
         comments: [],
         isFavorite: false
@@ -1797,14 +1880,18 @@ ${selectedRecipe.videoUrl ? `🎥 *Vídeo explicativo:* ${selectedRecipe.videoUr
   // NUTRICIONISTA IA - CHAT E INSIGHTS
   // -------------------------------------------------------------
   const [nutriInput, setNutriInput] = useState('');
-  const [nutriMessages, setNutriMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: `Olá, **${settings.userName}**! Sou a sua Nutricionista Esportiva e Consultora Alimentar de IA. 
+  const [nutriMessages, setNutriMessages] = useState<ChatMessage[]>(() => {
+    const saved = db.getNutriChatHistory();
+    if (saved.length > 0) return saved as ChatMessage[];
+    return [
+      {
+        role: 'assistant',
+        content: `Olá, **${settings.userName}**! Sou a sua Nutricionista Esportiva e Consultora Alimentar de IA.
 
 Analisei seus dados biométricos de bioimpedância e seu nível de treino de musculação/corrida. Como posso estruturar o seu cardápio, calcular suas metas de macronutrientes ou sugerir receitas hoje?`
-    }
-  ]);
+      }
+    ];
+  });
   const [nutriTyping, setNutriTyping] = useState(false);
 
   const handleSendNutriMsg = async (textToSend?: string) => {
@@ -1819,13 +1906,65 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
 
     try {
       const response = await askAINutritionist(msgVal, nutriMessages);
-      setNutriMessages([...updatedMsgs, { role: 'assistant' as const, content: response }]);
+      const finalMsgs = [...updatedMsgs, { role: 'assistant' as const, content: response }];
+      setNutriMessages(finalMsgs);
+      db.saveNutriChatHistory(finalMsgs);
     } catch (err) {
       console.error(err);
-      setNutriMessages([...updatedMsgs, { role: 'assistant' as const, content: 'Desculpe, ocorreu um erro ao analisar seus dados nutricionais.' }]);
+      const finalMsgs = [...updatedMsgs, { role: 'assistant' as const, content: 'Desculpe, ocorreu um erro ao analisar seus dados nutricionais.' }];
+      setNutriMessages(finalMsgs);
+      db.saveNutriChatHistory(finalMsgs);
     } finally {
       setNutriTyping(false);
     }
+  };
+
+  // Extração de receitas estruturadas a partir de uma sugestão da IA
+  const [extractingRecipesIdx, setExtractingRecipesIdx] = useState<number | null>(null);
+  const [extractedRecipeDrafts, setExtractedRecipeDrafts] = useState<RecipeDraft[]>([]);
+  const [showExtractedRecipesModal, setShowExtractedRecipesModal] = useState(false);
+
+  const handleExtractRecipesFromMsg = async (idx: number, content: string) => {
+    setExtractingRecipesIdx(idx);
+    try {
+      const drafts = await extractRecipesFromSuggestion(content);
+      if (drafts.length === 0) {
+        alert('Nenhuma receita estruturada foi identificada nesta resposta.');
+        return;
+      }
+      setExtractedRecipeDrafts(drafts);
+      setShowExtractedRecipesModal(true);
+    } catch (err: any) {
+      console.error('Erro ao extrair receitas da sugestão:', err);
+      alert(err.message || 'Não foi possível extrair receitas desta resposta. Verifique se há uma chave de API de IA configurada em Ajustes.');
+    } finally {
+      setExtractingRecipesIdx(null);
+    }
+  };
+
+  const handleSaveExtractedRecipe = (draft: RecipeDraft) => {
+    const newRecipe: Recipe = {
+      id: `rec-${Date.now()}`,
+      title: draft.title,
+      description: draft.description || '',
+      rating: 5,
+      prepTime: draft.prepTime || 15,
+      cookTime: draft.cookTime || 15,
+      totalTime: (draft.prepTime || 15) + (draft.cookTime || 15),
+      servings: draft.servings || 1,
+      image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
+      ingredients: draft.ingredients || [],
+      instructions: draft.instructions || [],
+      tags: draft.tags || [],
+      dietaryCategories: draft.dietaryCategories || [],
+      mealTypes: draft.mealTypes || [],
+      comments: [],
+      isFavorite: false,
+      lastMade: 'Nunca'
+    };
+    db.saveRecipe(newRecipe);
+    setExtractedRecipeDrafts(prev => prev.filter(d => d !== draft));
+    refreshDietData();
   };
 
   return (
@@ -2280,11 +2419,23 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Seletor de Data Semanal conforme Imagem 4 */}
           <div className="flex-between" style={{ flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ background: 'var(--accent-orange)', padding: '0.65rem 1.25rem', borderRadius: '8px', color: '#fff', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={16} />
-              <span>
-                {plannerDates[0]?.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} - {plannerDates[6]?.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ background: 'var(--accent-orange)', padding: '0.65rem 1.25rem', borderRadius: '8px', color: '#fff', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Calendar size={16} />
+                <span>
+                  {plannerDates[0]?.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} - {plannerDates[6]?.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Data de início:
+                <input
+                  type="date"
+                  className="form-control"
+                  style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                  value={formatDateInputValue(plannerStartDate)}
+                  onChange={(e) => handlePlannerStartDateChange(e.target.value)}
+                />
+              </label>
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2346,7 +2497,7 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                       <Utensils size={14} />
                       {meal.name}
                     </h4>
-                    <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => { setActiveMealId(meal.id); setSelectedRecipeId(recipes[0]?.id || ''); setShowAddMealModal(true); }}>
+                    <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => { setActiveMealId(meal.id); setSelectedRecipeId(recipes[0]?.id || ''); setRepeatOnDays([]); setShowAddMealModal(true); }}>
                       <Plus size={12} /> Adicionar
                     </button>
                   </div>
@@ -2394,7 +2545,7 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               />
               <Search size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
             </div>
-            <button className="btn btn-accent" onClick={() => { setEditingRecipeId(null); setShowAddRecipeModal(true); }}>
+            <button className="btn btn-accent" onClick={() => { setEditingRecipeId(null); setPendingRecipeId(`rec-${Date.now()}`); setShowAddRecipeModal(true); }}>
               <Plus size={16} /> Cadastrar Receita
             </button>
           </div>
@@ -3030,6 +3181,18 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             {nutriMessages.map((msg, idx) => (
               <div key={idx} className={`nutri-chat-bubble ${msg.role}`}>
                 {msg.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} style={{ color: '#fff' }}>{part}</strong> : part)}
+                {msg.role === 'assistant' && idx > 0 && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.7rem', padding: '0.3rem 0.6rem' }}
+                      disabled={extractingRecipesIdx === idx}
+                      onClick={() => handleExtractRecipesFromMsg(idx, msg.content)}
+                    >
+                      <BookOpen size={12} /> {extractingRecipesIdx === idx ? 'Analisando resposta...' : 'Salvar receitas desta resposta'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             {nutriTyping && (
@@ -3118,7 +3281,11 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                     placeholder="Ex: Arroz com patinho"
                     value={customMealForm.name}
                     onChange={(e) => setCustomMealForm({ ...customMealForm, name: e.target.value })}
+                    onBlur={handleAutoFillMacros}
                   />
+                  {estimatingMacros && (
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Estimando valores nutricionais...</span>
+                  )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                   <div className="form-group">
@@ -3167,9 +3334,70 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
               </div>
             )}
 
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>Repetir também em:</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.35rem' }}>
+                {plannerDates.map((date, idx) => {
+                  const dateIso = date.toISOString().split('T')[0];
+                  if (dateIso === selectedDateStr) return null;
+                  const checked = repeatOnDays.includes(dateIso);
+                  return (
+                    <label
+                      key={idx}
+                      className="checkbox-label"
+                      style={{
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.6rem',
+                        fontSize: '0.75rem',
+                        color: checked ? 'var(--accent-orange)' : 'var(--text-secondary)'
+                      }}
+                    >
+                      <input type="checkbox" checked={checked} onChange={() => toggleRepeatDay(dateIso)} />
+                      <span style={{ textTransform: 'capitalize' }}>
+                        {date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleAddMealItem}>Adicionar Item</button>
               <button className="btn btn-secondary" onClick={() => setShowAddMealModal(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RECEITAS EXTRAÍDAS DA SUGESTÃO DA NUTRICIONISTA IA */}
+      {showExtractedRecipesModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto', padding: '1.5rem', textAlign: 'left' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>Receitas encontradas na sugestão</h3>
+            {extractedRecipeDrafts.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>Todas as receitas encontradas já foram salvas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {extractedRecipeDrafts.map((draft, idx) => (
+                  <div key={idx} className="glass-card" style={{ padding: '0.85rem' }}>
+                    <div className="flex-between" style={{ alignItems: 'flex-start', gap: '0.75rem' }}>
+                      <div>
+                        <strong style={{ color: '#fff' }}>{draft.title}</strong>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0' }}>{draft.description}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>{(draft.ingredients || []).length} ingredientes · {(draft.instructions || []).length} passos de preparo</p>
+                      </div>
+                      <button className="btn btn-primary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }} onClick={() => handleSaveExtractedRecipe(draft)}>
+                        Adicionar às Minhas Receitas
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowExtractedRecipesModal(false)}>Fechar</button>
             </div>
           </div>
         </div>
@@ -3388,6 +3616,19 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
                   value={newRecipeForm.image}
                   onChange={(e) => setNewRecipeForm({ ...newRecipeForm, image: e.target.value })}
                 />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <label className="btn btn-secondary" style={{ fontSize: '0.75rem', cursor: 'pointer' }}>
+                    Enviar arquivo de imagem
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleRecipeImageFileChange} disabled={uploadingRecipeImage} />
+                  </label>
+                  {uploadingRecipeImage && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Enviando...</span>}
+                  {newRecipeForm.image && !uploadingRecipeImage && (
+                    <img src={newRecipeForm.image} alt="Prévia" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: '6px' }} />
+                  )}
+                </div>
+                {recipeImageUploadError && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-red, #f87171)' }}>{recipeImageUploadError}</span>
+                )}
               </div>
 
               <div className="form-group">

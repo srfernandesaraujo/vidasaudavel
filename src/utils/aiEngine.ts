@@ -645,6 +645,157 @@ Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de cód
 }
 
 // -------------------------------------------------------------
+// ESTIMATIVA DE MACROS DE ALIMENTO AVULSO (AUTOFILL)
+// -------------------------------------------------------------
+
+const COMMON_FOOD_MACROS: { keywords: string[]; calories: number; protein: number; carbs: number; fat: number }[] = [
+  { keywords: ['ovo'], calories: 78, protein: 6, carbs: 1, fat: 5 },
+  { keywords: ['clara de ovo', 'claras'], calories: 17, protein: 4, carbs: 0, fat: 0 },
+  { keywords: ['arroz'], calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
+  { keywords: ['feijão', 'feijao'], calories: 127, protein: 8.7, carbs: 23, fat: 0.5 },
+  { keywords: ['frango', 'peito de frango'], calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { keywords: ['carne', 'patinho', 'alcatra'], calories: 217, protein: 26, carbs: 0, fat: 12 },
+  { keywords: ['peixe', 'tilápia', 'tilapia', 'salmão', 'salmao'], calories: 180, protein: 22, carbs: 0, fat: 9 },
+  { keywords: ['aveia'], calories: 389, protein: 17, carbs: 66, fat: 7 },
+  { keywords: ['banana'], calories: 89, protein: 1.1, carbs: 23, fat: 0.3 },
+  { keywords: ['maçã', 'maca'], calories: 52, protein: 0.3, carbs: 14, fat: 0.2 },
+  { keywords: ['pão', 'pao'], calories: 265, protein: 9, carbs: 49, fat: 3.2 },
+  { keywords: ['batata doce'], calories: 86, protein: 1.6, carbs: 20, fat: 0.1 },
+  { keywords: ['batata'], calories: 77, protein: 2, carbs: 17, fat: 0.1 },
+  { keywords: ['queijo'], calories: 350, protein: 25, carbs: 1.3, fat: 27 },
+  { keywords: ['leite'], calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3 },
+  { keywords: ['iogurte'], calories: 59, protein: 10, carbs: 3.6, fat: 0.4 },
+  { keywords: ['whey', 'proteína em pó', 'proteina em po'], calories: 120, protein: 24, carbs: 3, fat: 1.5 },
+  { keywords: ['tapioca'], calories: 240, protein: 0.2, carbs: 60, fat: 0 },
+  { keywords: ['macarrão', 'macarrao', 'massa'], calories: 158, protein: 5.8, carbs: 31, fat: 0.9 },
+  { keywords: ['abacate'], calories: 160, protein: 2, carbs: 8.5, fat: 14.7 },
+  { keywords: ['azeite', 'óleo', 'oleo'], calories: 884, protein: 0, carbs: 0, fat: 100 },
+  { keywords: ['amendoim', 'castanha', 'nozes'], calories: 567, protein: 25, carbs: 16, fat: 49 },
+  { keywords: ['brócolis', 'brocolis', 'legume', 'vegetal'], calories: 34, protein: 2.8, carbs: 7, fat: 0.4 },
+  { keywords: ['alface', 'salada'], calories: 15, protein: 1.4, carbs: 2.9, fat: 0.2 },
+];
+
+function estimateFoodMacrosLocal(foodName: string): { calories: number; protein: number; carbs: number; fat: number } {
+  const query = foodName.toLowerCase();
+  const match = COMMON_FOOD_MACROS.find(entry => entry.keywords.some(k => query.includes(k)));
+  if (match) {
+    return { calories: match.calories, protein: match.protein, carbs: match.carbs, fat: match.fat };
+  }
+  // Estimativa genérica quando o alimento não é reconhecido na tabela local
+  return { calories: 150, protein: 8, carbs: 15, fat: 6 };
+}
+
+export async function estimateFoodMacros(foodName: string): Promise<{ calories: number; protein: number; carbs: number; fat: number }> {
+  const settings = db.getSettings();
+
+  if (settings.apiKey && settings.apiProvider !== 'none') {
+    const prompt = `Estime os valores nutricionais aproximados (para uma porção usual/individual) do seguinte alimento ou prato: "${foodName}".
+Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown ou qualquer texto adicional:
+{
+  "calories": 300,
+  "protein": 20,
+  "carbs": 15,
+  "fat": 10
+}`;
+    try {
+      let rawText = '';
+      if (settings.apiProvider === 'gemini') {
+        rawText = await callGeminiAPI(settings.apiKey, prompt, []);
+      } else if (settings.apiProvider === 'openai') {
+        rawText = await callOpenAIAPI(settings.apiKey, prompt, [], 'Você é um nutricionista que estima macronutrientes de alimentos em formato JSON.');
+      }
+      const cleanJsonStr = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJsonStr);
+      if (parsed && typeof parsed.calories === 'number') {
+        return {
+          calories: Math.round(parsed.calories) || 0,
+          protein: Math.round(parsed.protein) || 0,
+          carbs: Math.round(parsed.carbs) || 0,
+          fat: Math.round(parsed.fat) || 0
+        };
+      }
+    } catch (err) {
+      console.error('Erro ao estimar macros via IA, usando tabela local:', err);
+    }
+  }
+
+  return estimateFoodMacrosLocal(foodName);
+}
+
+// -------------------------------------------------------------
+// EXTRAÇÃO DE RECEITAS ESTRUTURADAS A PARTIR DE SUGESTÕES DO CHAT
+// -------------------------------------------------------------
+
+export interface RecipeDraft {
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string[];
+  prepTime: number;
+  cookTime: number;
+  servings: number;
+  tags: string[];
+  dietaryCategories: string[];
+  mealTypes: string[];
+}
+
+export async function extractRecipesFromSuggestion(assistantMessage: string): Promise<RecipeDraft[]> {
+  const settings = db.getSettings();
+  if (!settings.apiKey || settings.apiProvider === 'none') {
+    throw new Error('Este recurso requer uma chave de API de IA (Gemini ou OpenAI) configurada em Ajustes.');
+  }
+
+  const prompt = `A seguir está uma resposta de uma Nutricionista de IA para um usuário. Identifique todas as receitas ou pratos concretos mencionados nela (ex: café da manhã, almoço, jantar, lanches sugeridos) e estruture cada uma como uma receita completa.
+
+RESPOSTA DA NUTRICIONISTA:
+"""
+${assistantMessage}
+"""
+
+Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown ou qualquer texto adicional. Se a mensagem não tiver nenhuma receita ou prato específico, retorne { "recipes": [] }:
+{
+  "recipes": [
+    {
+      "title": "Nome do prato",
+      "description": "Breve descrição do prato",
+      "ingredients": ["4 ovos", "1 colher de sopa de azeite"],
+      "instructions": ["Passo 1 detalhado", "Passo 2 detalhado"],
+      "prepTime": 10,
+      "cookTime": 15,
+      "servings": 1,
+      "tags": ["Fit"],
+      "dietaryCategories": [],
+      "mealTypes": []
+    }
+  ]
+}`;
+
+  let rawText = '';
+  if (settings.apiProvider === 'gemini') {
+    rawText = await callGeminiAPI(settings.apiKey, prompt, []);
+  } else if (settings.apiProvider === 'openai') {
+    rawText = await callOpenAIAPI(settings.apiKey, prompt, [], 'Você é um extrator de receitas estruturadas em formato JSON.');
+  }
+
+  const cleanJsonStr = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+  const parsed = JSON.parse(cleanJsonStr);
+  if (!parsed || !Array.isArray(parsed.recipes)) return [];
+
+  return parsed.recipes.map((r: any) => ({
+    title: r.title || 'Receita sem título',
+    description: r.description || '',
+    ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+    instructions: Array.isArray(r.instructions) ? r.instructions : [],
+    prepTime: Number(r.prepTime) || 10,
+    cookTime: Number(r.cookTime) || 10,
+    servings: Number(r.servings) || 1,
+    tags: Array.isArray(r.tags) ? r.tags : [],
+    dietaryCategories: Array.isArray(r.dietaryCategories) ? r.dietaryCategories : [],
+    mealTypes: Array.isArray(r.mealTypes) ? r.mealTypes : []
+  }));
+}
+
+// -------------------------------------------------------------
 // PLANILHA DE CORRIDA PERSONALIZADA COM IA
 // -------------------------------------------------------------
 
@@ -977,6 +1128,70 @@ export async function generateRunningPlan(
   });
 }
 
+// Extrai quantidade, unidade e nome de uma linha de ingrediente em texto livre
+// (ex: "4 ovos", "200g de peito de frango", "1/2 xícara de aveia", "2 colheres de sopa de azeite")
+function parseIngredientLine(line: string): { qty: number | null; unit: string; name: string } {
+  const trimmed = line.trim();
+  const match = trimmed.match(
+    /^([\d]+(?:[.,]\d+)?(?:\s*\/\s*\d+)?)\s*(colheres?\s+de\s+(?:sopa|ch[áa])|x[íi]caras?|gramas?|quilos?|kg|g|ml|litros?|l|fatias?|unidades?|dentes?|pitadas?|punhados?)?\s*(?:de\s+)?(.+)$/i
+  );
+
+  if (!match) {
+    return { qty: null, unit: '', name: trimmed };
+  }
+
+  const [, qtyRaw, unitRaw, nameRaw] = match;
+  let qty: number | null = null;
+  if (qtyRaw.includes('/')) {
+    const [num, den] = qtyRaw.split('/').map(s => parseFloat(s.replace(',', '.').trim()));
+    qty = den ? num / den : null;
+  } else {
+    qty = parseFloat(qtyRaw.replace(',', '.'));
+  }
+
+  return {
+    qty: qty !== null && !isNaN(qty) ? qty : null,
+    unit: (unitRaw || '').toLowerCase().replace(/\s+/g, ' ').trim(),
+    name: (nameRaw || trimmed).trim()
+  };
+}
+
+// Normaliza o nome do ingrediente (minúsculas, sem acento, singular simples) só como chave de agrupamento
+function normalizeIngredientName(name: string): string {
+  let n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  if (n.endsWith('s') && n.length > 3) n = n.slice(0, -1);
+  return n;
+}
+
+// Agrega uma lista de linhas de ingredientes (podendo ter repetições de receitas usadas
+// várias vezes na semana), somando quantidades de itens equivalentes em vez de duplicá-los
+// ou perdê-los numa deduplicação ingênua por string inteira.
+function aggregateIngredientLines(lines: string[]): string[] {
+  const map = new Map<string, { qtySum: number | null; unit: string; displayName: string; occurrences: number }>();
+
+  lines.forEach(line => {
+    const { qty, unit, name } = parseIngredientLine(line);
+    const key = `${unit}|${normalizeIngredientName(name)}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.occurrences += 1;
+      existing.qtySum = (qty !== null && existing.qtySum !== null) ? existing.qtySum + qty : null;
+    } else {
+      map.set(key, { qtySum: qty, unit, displayName: name, occurrences: 1 });
+    }
+  });
+
+  return Array.from(map.values()).map(entry => {
+    if (entry.qtySum !== null && entry.qtySum > 0) {
+      const qtyStr = Number.isInteger(entry.qtySum) ? String(entry.qtySum) : entry.qtySum.toFixed(1).replace('.', ',');
+      if (!entry.unit) return `${qtyStr} ${entry.displayName}`;
+      const glue = ['g', 'kg', 'ml', 'l'].includes(entry.unit) ? '' : ' ';
+      return `${qtyStr}${glue}${entry.unit} de ${entry.displayName}`;
+    }
+    return entry.occurrences > 1 ? `${entry.displayName} (usado ${entry.occurrences}x)` : entry.displayName;
+  });
+}
+
 export async function generateShoppingListWithAI(
   mealPlans: any[],
   recipes: any[]
@@ -984,8 +1199,8 @@ export async function generateShoppingListWithAI(
   categories: { name: string; items: string[] }[];
 }> {
   const settings = db.getSettings();
-  const plannedItems: string[] = [];
-  const recipeIngredients: string[] = [];
+  const plannedItemLines: string[] = [];
+  const recipeIngredientLines: string[] = [];
 
   mealPlans.forEach(plan => {
     plan.meals.forEach((meal: any) => {
@@ -993,28 +1208,30 @@ export async function generateShoppingListWithAI(
         if (item.recipeId) {
           const rec = recipes.find(r => r.id === item.recipeId);
           if (rec && Array.isArray(rec.ingredients)) {
-            recipeIngredients.push(...rec.ingredients);
+            // Não deduplicamos aqui: cada vez que a receita aparece no cardápio da semana,
+            // seus ingredientes entram de novo para que a soma de quantidade seja correta.
+            recipeIngredientLines.push(...rec.ingredients);
           }
         } else if (item.customName) {
-          plannedItems.push(item.customName);
+          plannedItemLines.push(item.customName);
         }
       });
     });
   });
 
-  const uniqueRecipeIngredients = Array.from(new Set(recipeIngredients));
-  const uniqueCustomItems = Array.from(new Set(plannedItems));
+  const aggregatedRecipeItems = aggregateIngredientLines(recipeIngredientLines);
+  const aggregatedCustomItems = aggregateIngredientLines(plannedItemLines);
 
   const prompt = `Você é um Assistente Nutricional de IA altamente especializado.
-Consolide e agrupe os seguintes itens planejados de refeições e ingredientes de receitas em uma Lista de Compras de Supermercado inteligente e organizada.
+As quantidades abaixo já foram somadas e consolidadas para a semana inteira — sua única tarefa é organizá-las em categorias de supermercado, SEM somar, duplicar, remover ou alterar as quantidades informadas.
 
-INGREDIENTES DE RECEITAS:
-${uniqueRecipeIngredients.join('\n') || 'Nenhum ingrediente de receita cadastrado.'}
+INGREDIENTES DE RECEITAS (quantidades já somadas para a semana toda):
+${aggregatedRecipeItems.join('\n') || 'Nenhum ingrediente de receita cadastrado.'}
 
-ITENS PLANEJADOS AVULSOS:
-${uniqueCustomItems.join('\n') || 'Nenhum item avulso planejado.'}
+ITENS PLANEJADOS AVULSOS (quantidades já somadas para a semana toda):
+${aggregatedCustomItems.join('\n') || 'Nenhum item avulso planejado.'}
 
-Organize esses ingredientes e alimentos e agrupe-os estritamente em categorias de supermercado: "Hortifruti" (frutas e vegetais), "Açougue & Peixaria" (carnes, ovos, frango, peixe), "Laticínios & Frios", "Mercearia & Secos" (arroz, aveia, massas, grãos, etc.), "Suplementos & Outros".
+Agrupe esses itens estritamente em categorias de supermercado: "Hortifruti" (frutas e vegetais), "Açougue & Peixaria" (carnes, ovos, frango, peixe), "Laticínios & Frios", "Mercearia & Secos" (arroz, aveia, massas, grãos, etc.), "Suplementos & Outros".
 
 Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto de introdução/conclusão:
 {
@@ -1070,8 +1287,8 @@ Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de cód
     }
   };
 
-  uniqueRecipeIngredients.forEach(categorize);
-  uniqueCustomItems.forEach(categorize);
+  aggregatedRecipeItems.forEach(categorize);
+  aggregatedCustomItems.forEach(categorize);
 
   if (hortifruti.length === 0 && acougue.length === 0 && laticinios.length === 0 && mercearia.length === 0 && suplementos.length === 0) {
     acougue.push('4 Ovos inteiros', '60g de Frango desfiado');
