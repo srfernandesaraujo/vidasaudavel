@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { db, type RunLog, type BodyCompLog, type RunningPlan, type RunningPlanWeekDay } from '../utils/db';
-import { generateRunningPlan } from '../utils/aiEngine';
+import { db, type RunLog, type BodyCompLog, type RunningPlan, type RunningPlanWeekDay, type UserSettings } from '../utils/db';
+import { generateRunningPlan, type RunningPlanRequest } from '../utils/aiEngine';
+import { RunPlanOnboarding, type RunOnboardingForm } from './RunPlanOnboarding';
 import { 
   Footprints, 
   TrendingUp, 
@@ -43,12 +44,13 @@ const parseTrainingText = (text: string) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('⚡') || trimmed.startsWith('📈') || trimmed.startsWith('🏃‍♂️') || trimmed.startsWith('🏆')) {
       title = trimmed;
+    } else if (trimmed.toLowerCase().includes('desaquecimento:')) {
+      // Precisa ser checado antes de "aquecimento:", já que "desaquecimento" contém esse texto como substring
+      coolDown = trimmed.replace(/^-\s*desaquecimento:\s*/i, '').replace(/^desaquecimento:\s*/i, '');
     } else if (trimmed.toLowerCase().includes('aquecimento:')) {
       warmUp = trimmed.replace(/^-\s*aquecimento:\s*/i, '').replace(/^aquecimento:\s*/i, '');
     } else if (trimmed.toLowerCase().includes('parte principal:')) {
       mainSet = trimmed.replace(/^-\s*parte principal:\s*/i, '').replace(/^parte principal:\s*/i, '');
-    } else if (trimmed.toLowerCase().includes('desaquecimento:')) {
-      coolDown = trimmed.replace(/^-\s*desaquecimento:\s*/i, '').replace(/^desaquecimento:\s*/i, '');
     } else if (trimmed.toLowerCase().includes('dica do treinador:')) {
       coachTip = trimmed.replace(/^-\s*dica do treinador:\s*/i, '').replace(/^dica do treinador:\s*/i, '');
     }
@@ -134,32 +136,79 @@ export const RunTracker: React.FC = () => {
   const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
   const [editingBodyLogId, setEditingBodyLogId] = useState<string | null>(null);
 
-  // Planilha de Corrida IA
-  const [runningPlan, setRunningPlan] = useState<RunningPlan | null>(db.getRunningPlan());
+  // Planilha de Corrida IA — suporta múltiplas planilhas ativas (uma por distância)
+  const [activePlans, setActivePlans] = useState<RunningPlan[]>(db.getActiveRunningPlans());
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(() => activePlans[0]?.id || null);
+  const runningPlan = useMemo(
+    () => activePlans.find(p => p.id === selectedPlanId) ?? activePlans[0] ?? null,
+    [activePlans, selectedPlanId]
+  );
+  const getPlanBaseDate = (plan: RunningPlan) => plan.startDate ? new Date(plan.startDate + 'T00:00:00') : new Date(plan.createdAt);
+
+  const updatePlanInState = (plan: RunningPlan) => {
+    db.saveRunningPlan(plan);
+    setActivePlans(prev => {
+      const idx = prev.findIndex(p => p.id === plan.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = plan;
+        return next;
+      }
+      return [...prev, plan];
+    });
+    setSelectedPlanId(plan.id);
+  };
+
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [planForm, setPlanForm] = useState({
-    targetDistance: '5',
-    weeksCount: '4',
-    hasWearable: false,
-    maxHeartRate: '190',
-    referencePace: '06:00'
-  });
+  const [wizardMode, setWizardMode] = useState<'new' | 'adjust'>('new');
   const [expandedWeeks, setExpandedWeeks] = useState<Record<number, boolean>>({ 1: true });
+
+  const formatMinutesToPace = (totalMinutes: number): string => {
+    const m = Math.floor(totalMinutes);
+    const s = Math.round((totalMinutes - m) * 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const buildOnboardingInitialForm = (): RunOnboardingForm => {
+    const s = db.getSettings();
+    const birthParts = s.birthDate ? s.birthDate.split('-') : ['', '', ''];
+    const seedPlan = wizardMode === 'adjust' ? runningPlan : null;
+    const suggestedPace = referenceRun && referenceRun.distance > 0
+      ? formatMinutesToPace(referenceRun.time / referenceRun.distance)
+      : '06:00';
+    return {
+      goalType: seedPlan?.goalType || '',
+      skillLevel: s.runningSkillLevel || '',
+      injuryHistory: s.injuryHistory || '',
+      birthDay: birthParts[2] ? String(Number(birthParts[2])) : '',
+      birthMonth: birthParts[1] ? String(Number(birthParts[1])) : '',
+      birthYear: birthParts[0] || '',
+      gender: s.gender || '',
+      availableDays: s.availableRunDays && s.availableRunDays.length > 0 ? s.availableRunDays : ['segunda', 'quarta', 'sabado'],
+      referencePace: seedPlan?.referencePace || suggestedPace,
+      daysPerWeek: '3',
+      targetDistance: seedPlan ? String(seedPlan.targetDistance) : '5',
+      weeksCount: seedPlan ? String(seedPlan.weeksCount) : '4',
+      longRunDay: 'sabado',
+      startDateOption: 'hoje',
+      customStartDate: '',
+      hasWearable: seedPlan?.hasWearable || false,
+      maxHeartRate: seedPlan?.maxHeartRate ? String(seedPlan.maxHeartRate) : '190',
+      replaceExisting: false
+    };
+  };
 
   // Controle de Visualização do Calendário e Modal de Detalhes
   const [planViewMode, setPlanViewMode] = useState<'calendar' | 'weeks'>('calendar');
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState<Date>(() => {
-    const plan = db.getRunningPlan();
-    if (plan && plan.createdAt) {
-      return new Date(plan.createdAt);
-    }
-    return new Date();
+    const plan = db.getActiveRunningPlans()[0];
+    return plan ? getPlanBaseDate(plan) : new Date();
   });
 
   useEffect(() => {
-    if (runningPlan && runningPlan.createdAt) {
-      setCurrentCalendarMonth(new Date(runningPlan.createdAt));
+    if (runningPlan) {
+      setCurrentCalendarMonth(getPlanBaseDate(runningPlan));
     }
   }, [runningPlan]);
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<{
@@ -189,9 +238,9 @@ export const RunTracker: React.FC = () => {
     const mapping: Record<string, { weekNumber: number; dayIndex: number; day: RunningPlanWeekDay }> = {};
     if (!runningPlan) return mapping;
 
-    const planDate = new Date(runningPlan.createdAt);
+    const planDate = getPlanBaseDate(runningPlan);
     const dayOfWeek = planDate.getDay();
-    
+
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
 
@@ -279,7 +328,7 @@ export const RunTracker: React.FC = () => {
   const getDayDateStr = (weekNumber: number, dIdx: number, day: RunningPlanWeekDay) => {
     if (day.date) return day.date;
     if (!runningPlan) return '';
-    const planDate = new Date(runningPlan.createdAt);
+    const planDate = getPlanBaseDate(runningPlan);
     const dayOfWeek = planDate.getDay();
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
@@ -339,8 +388,7 @@ export const RunTracker: React.FC = () => {
         weeks: updatedWeeks
       };
 
-      setRunningPlan(updatedPlan);
-      db.saveRunningPlan(updatedPlan);
+      updatePlanInState(updatedPlan);
     } catch (err) {
       console.error('Erro ao processar o drop do treino de corrida:', err);
     }
@@ -352,7 +400,7 @@ export const RunTracker: React.FC = () => {
 
     const [year, month, day] = startDateInputValue.split('-').map(Number);
     const newStartDate = new Date(year, month - 1, day);
-    
+
     const updatedWeeks = runningPlan.weeks.map(week => {
       const updatedDays = week.days.map(day => {
         const { date: _, ...rest } = day;
@@ -363,13 +411,12 @@ export const RunTracker: React.FC = () => {
 
     const updatedPlan: RunningPlan = {
       ...runningPlan,
-      createdAt: newStartDate.toISOString(),
+      startDate: startDateInputValue,
       weeks: updatedWeeks
     };
 
-    setRunningPlan(updatedPlan);
-    db.saveRunningPlan(updatedPlan);
-    
+    updatePlanInState(updatedPlan);
+
     setCurrentCalendarMonth(newStartDate);
     setIsStartDateModalOpen(false);
   };
@@ -457,22 +504,24 @@ export const RunTracker: React.FC = () => {
     }
   };
 
-  const handleGeneratePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWizardComplete = async (request: RunningPlanRequest, profileUpdates: Partial<UserSettings>) => {
+    setIsPlanModalOpen(false);
     setIsGeneratingPlan(true);
     try {
-      const plan = await generateRunningPlan(
-        Number(planForm.targetDistance), 
-        Number(planForm.weeksCount),
-        planForm.hasWearable,
-        Number(planForm.maxHeartRate),
-        planForm.referencePace
-      );
+      // Salva os dados de perfil coletados no onboarding para reaproveitar/pré-preencher da próxima vez
+      db.saveSettings({ ...db.getSettings(), ...profileUpdates });
+
+      const plan = await generateRunningPlan(request);
+
+      // Uma planilha ativa da mesma distância (se houver) é substituída pela nova
+      const conflicting = activePlans.find(p => p.targetDistance === request.targetDistance);
+      if (conflicting) {
+        db.deleteRunningPlan(conflicting.id);
+      }
       db.saveRunningPlan(plan);
-      setRunningPlan(plan);
-      setIsPlanModalOpen(false);
-      
-      // Dispara confetes para comemorar a planilha gerada
+      setActivePlans(prev => [...prev.filter(p => p.id !== conflicting?.id), plan]);
+      setSelectedPlanId(plan.id);
+
       confetti({
         particleCount: 100,
         spread: 70,
@@ -489,9 +538,12 @@ export const RunTracker: React.FC = () => {
   };
 
   const handleDeletePlan = () => {
-    if (window.confirm('Deseja realmente excluir sua planilha de treinos ativa? Todo o seu progresso nesta planilha será perdido.')) {
-      db.deleteRunningPlan();
-      setRunningPlan(null);
+    if (!runningPlan) return;
+    if (window.confirm('Deseja realmente excluir esta planilha de treinos? Todo o seu progresso nela será perdido.')) {
+      db.deleteRunningPlan(runningPlan.id);
+      const next = activePlans.filter(p => p.id !== runningPlan.id);
+      setActivePlans(next);
+      setSelectedPlanId(next[0]?.id || null);
       alert('Planilha excluída com sucesso.');
     }
   };
@@ -517,8 +569,7 @@ export const RunTracker: React.FC = () => {
       weeks: updatedWeeks
     };
 
-    db.saveRunningPlan(updatedPlan);
-    setRunningPlan(updatedPlan);
+    updatePlanInState(updatedPlan);
 
     // Se concluiu todas as corridas da semana, confetes leves!
     const targetWeek = updatedWeeks.find(w => w.weekNumber === weekNumber);
@@ -1417,10 +1468,10 @@ export const RunTracker: React.FC = () => {
                     Defina sua distância alvo (ex: 5km, 10km) e o prazo em semanas. Nosso treinador de IA montará um planejamento de treinos progressivo e sob medida para você alcançar sua meta!
                   </p>
                 </div>
-                <button 
-                  className="btn btn-primary" 
+                <button
+                  className="btn btn-primary"
                   style={{ background: 'linear-gradient(90deg, #2563eb, #8b5cf6)', border: 'none', boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)' }}
-                  onClick={() => setIsPlanModalOpen(true)}
+                  onClick={() => { setWizardMode('new'); setIsPlanModalOpen(true); }}
                 >
                   <Activity size={16} />
                   Gerar Planilha com IA
@@ -1428,6 +1479,32 @@ export const RunTracker: React.FC = () => {
               </div>
             ) : (
               <div className="glass-card" style={{ padding: '2rem' }}>
+                {activePlans.length > 1 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                    {activePlans.map(p => {
+                      const isSelected = p.id === runningPlan?.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedPlanId(p.id)}
+                          style={{
+                            padding: '0.4rem 0.9rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: isSelected ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+                            border: isSelected ? '1px solid #3b82f6' : '1px solid var(--border-subtle)',
+                            color: isSelected ? '#60a5fa' : 'var(--text-secondary)'
+                          }}
+                        >
+                          {p.targetDistance} km
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {/* 1. Cabeçalho de Resumo da Planilha Ativa (estilo Imagem 2) */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem', marginBottom: '1.25rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
@@ -1483,20 +1560,29 @@ export const RunTracker: React.FC = () => {
                     Lista Semanal
                   </button>
                   <div style={{ height: '20px', width: '1px', background: 'var(--border-subtle)', margin: '0 0.25rem' }}></div>
-                  <button 
+                  <button
                     type="button"
                     className="plan-action-btn"
-                    onClick={() => setIsPlanModalOpen(true)}
-                    title="Configurar/Gerar novo planejamento com a IA"
+                    onClick={() => { setWizardMode('adjust'); setIsPlanModalOpen(true); }}
+                    title="Reconfigurar esta planilha com a IA"
                   >
                     <Sparkles size={14} color="#60a5fa" />
                     Ajustar com IA
                   </button>
-                  <button 
+                  <button
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => { setWizardMode('new'); setIsPlanModalOpen(true); }}
+                    title="Criar uma planilha ativa para outra distância"
+                  >
+                    <Plus size={14} color="#34d399" />
+                    Nova Planilha
+                  </button>
+                  <button
                     type="button"
                     className="plan-action-btn"
                     onClick={() => {
-                      setStartDateInputValue(runningPlan?.createdAt ? new Date(runningPlan.createdAt).toISOString().split('T')[0] : '');
+                      setStartDateInputValue(runningPlan ? getPlanBaseDate(runningPlan).toISOString().split('T')[0] : '');
                       setIsStartDateModalOpen(true);
                     }}
                     title="Ajustar data de início de fato da planilha de treino"
@@ -2725,196 +2811,34 @@ export const RunTracker: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Gerar Planilha */}
+      {/* Onboarding para Gerar/Ajustar Planilha */}
       {isPlanModalOpen && (
+        <RunPlanOnboarding
+          initialForm={buildOnboardingInitialForm()}
+          activeDistances={activePlans.filter(p => p.id !== runningPlan?.id).map(p => p.targetDistance)}
+          onComplete={handleWizardComplete}
+          onCancel={() => setIsPlanModalOpen(false)}
+        />
+      )}
+
+      {/* Overlay de carregamento enquanto a IA monta a planilha */}
+      {isGeneratingPlan && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '450px' }}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Activity size={18} color="var(--accent-blue)" />
-                Gerar Planilha com IA
-              </h3>
-              <button className="btn btn-secondary" style={{ padding: '0.3rem' }} onClick={() => setIsPlanModalOpen(false)} disabled={isGeneratingPlan}>X</button>
-            </div>
-            <form onSubmit={handleGeneratePlan}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
-                {isGeneratingPlan ? (
-                  <div style={{ padding: '2.5rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-                    <div style={{ 
-                      width: '40px', 
-                      height: '40px', 
-                      border: '3px solid rgba(59, 130, 246, 0.1)', 
-                      borderTopColor: 'var(--accent-blue)', 
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite'
-                    }} />
-                    <div>
-                      <strong style={{ color: '#ffffff', fontSize: '1.05rem' }}>IA estruturando sua planilha...</strong>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Montando aquecimentos, tiros técnicos, longões e descansos.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, lineHeight: '1.4' }}>
-                      Selecione suas metas abaixo para o treinador de IA desenhar sua rotina e as zonas cardíacas objetivas.
-                    </p>
-                    
-                    {/* Seleção Distância Alvo por Cards */}
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.5rem', display: 'block' }}>Distância Alvo</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
-                        {[
-                          { value: '5', label: '5 km', desc: 'Iniciante / Sprint' },
-                          { value: '10', label: '10 km', desc: 'Intermediário' },
-                          { value: '15', label: '15 km', desc: 'Avançado' },
-                          { value: '21.1', label: '21.1 km', desc: 'Meia Maratona' },
-                          { value: '42.2', label: '42.2 km', desc: 'Maratona' }
-                        ].map(opt => {
-                          const isSelected = planForm.targetDistance === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setPlanForm({ ...planForm, targetDistance: opt.value })}
-                              style={{
-                                padding: '0.65rem 0.85rem',
-                                borderRadius: '8px',
-                                background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255,255,255,0.01)',
-                                border: isSelected ? '2px solid #3b82f6' : '1px solid var(--border-subtle)',
-                                color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                                textAlign: 'left',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.15)' : 'none'
-                              }}
-                            >
-                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: isSelected ? '#60a5fa' : '#ffffff' }}>{opt.label}</div>
-                              <div style={{ fontSize: '0.72rem', marginTop: '0.1rem', opacity: 0.8 }}>{opt.desc}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Seleção Prazo por Cards */}
-                    <div className="form-group">
-                      <label style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', marginBottom: '0.5rem', display: 'block' }}>Prazo de Preparação</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
-                        {[
-                          { value: '4', label: '4 Semanas', desc: 'Preparo Rápido' },
-                          { value: '8', label: '8 Semanas', desc: 'Tempo Ideal' },
-                          { value: '12', label: '12 Semanas', desc: 'Recomendado' },
-                          { value: '16', label: '16 Semanas', desc: 'Preparo Completo' }
-                        ].map(opt => {
-                          const isSelected = planForm.weeksCount === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setPlanForm({ ...planForm, weeksCount: opt.value })}
-                              style={{
-                                padding: '0.65rem 0.85rem',
-                                borderRadius: '8px',
-                                background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255,255,255,0.01)',
-                                border: isSelected ? '2px solid #8b5cf6' : '1px solid var(--border-subtle)',
-                                color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                                textAlign: 'left',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                boxShadow: isSelected ? '0 0 10px rgba(139, 92, 246, 0.15)' : 'none'
-                              }}
-                            >
-                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: isSelected ? '#c084fc' : '#ffffff' }}>{opt.label}</div>
-                              <div style={{ fontSize: '0.72rem', marginTop: '0.1rem', opacity: 0.8 }}>{opt.desc}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Toggle Customizado para Smartwatch */}
-                    <div style={{ 
-                      background: 'rgba(255,255,255,0.01)', 
-                      border: '1px solid var(--border-subtle)', 
-                      padding: '0.85rem 1rem', 
-                      borderRadius: '8px', 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center', 
-                      margin: '0.25rem 0' 
-                    }}>
-                      <div style={{ textAlign: 'left' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', display: 'block' }}>Smartwatch / Wearable</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Possui monitor cardíaco?</span>
-                      </div>
-                      <button 
-                        type="button"
-                        onClick={() => setPlanForm({ ...planForm, hasWearable: !planForm.hasWearable })}
-                        style={{
-                          width: '42px',
-                          height: '22px',
-                          borderRadius: '99px',
-                          background: planForm.hasWearable ? '#3b82f6' : 'rgba(255,255,255,0.1)',
-                          border: 'none',
-                          position: 'relative',
-                          cursor: 'pointer',
-                          transition: 'background 0.3s ease'
-                        }}
-                      >
-                        <div style={{
-                          width: '16px',
-                          height: '16px',
-                          borderRadius: '50%',
-                          background: '#ffffff',
-                          position: 'absolute',
-                          top: '3px',
-                          left: planForm.hasWearable ? '23px' : '3px',
-                          transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                        }} />
-                      </button>
-                    </div>
-
-                    {planForm.hasWearable && (
-                      <div className="form-group">
-                        <label htmlFor="planFC">Frequência Cardíaca Máxima (FCM em bpm)</label>
-                        <input
-                          id="planFC"
-                          type="number"
-                          className="form-control"
-                          placeholder="Ex: 190 (220 - sua idade caso não saiba)"
-                          value={planForm.maxHeartRate}
-                          onChange={(e) => setPlanForm({ ...planForm, maxHeartRate: e.target.value })}
-                          required
-                        />
-                      </div>
-                    )}
-
-                    <div className="form-group">
-                      <label htmlFor="planRefPace">Pace de Referência (ritmo para 5km - MM:SS)</label>
-                      <input
-                        id="planRefPace"
-                        type="text"
-                        className="form-control"
-                        placeholder="Ex: 06:00"
-                        value={planForm.referencePace}
-                        onChange={(e) => setPlanForm({ ...planForm, referencePace: e.target.value })}
-                        required
-                        pattern="^[0-9]{2}:[0-9]{2}$"
-                        title="Formato de Pace deve ser MM:SS (ex: 05:45 ou 06:00)"
-                      />
-                    </div>
-                  </>
-                )}
+          <div className="modal-content" style={{ maxWidth: '380px' }}>
+            <div className="modal-body" style={{ padding: '2.5rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                border: '3px solid rgba(59, 130, 246, 0.1)',
+                borderTopColor: 'var(--accent-blue)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} />
+              <div>
+                <strong style={{ color: '#ffffff', fontSize: '1.05rem' }}>IA estruturando sua planilha...</strong>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>Montando aquecimentos, tiros técnicos, longões e descansos.</p>
               </div>
-              
-              {!isGeneratingPlan && (
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setIsPlanModalOpen(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-primary">Gerar Minha Planilha</button>
-                </div>
-              )}
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -2974,9 +2898,51 @@ export const RunTracker: React.FC = () => {
                         </span>
                       </div>
                       
-                      <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.15)', padding: '0.85rem', borderRadius: '8px', borderLeft: '3px solid #3b82f6', whiteSpace: 'pre-line', lineHeight: '1.5' }}>
-                        {selectedCalendarDay.planDay.training}
-                      </div>
+                      {(() => {
+                        const parsed = parseTrainingText(selectedCalendarDay.planDay!.training);
+                        if (!parsed.isParsed) {
+                          return (
+                            <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.15)', padding: '0.85rem', borderRadius: '8px', borderLeft: '3px solid #3b82f6', whiteSpace: 'pre-line', lineHeight: '1.5' }}>
+                              {selectedCalendarDay.planDay!.training}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                            {parsed.title && (
+                              <h4 style={{ margin: 0, fontSize: '1rem', color: '#ffffff', fontWeight: 700, textAlign: 'left' }}>
+                                {parsed.title}
+                              </h4>
+                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                              {parsed.warmUp && (
+                                <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.02)', borderLeft: '3px solid #3b82f6', textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#60a5fa', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🧘‍♂️ Aquecimento Ativo</div>
+                                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.warmUp}</div>
+                                </div>
+                              )}
+                              {parsed.mainSet && (
+                                <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(236, 72, 153, 0.02)', borderLeft: '3px solid #ec4899', textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f472b6', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>⚡ Trabalho Principal</div>
+                                  <div style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.5' }}>{parsed.mainSet}</div>
+                                </div>
+                              )}
+                              {parsed.coolDown && (
+                                <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.02)', borderLeft: '3px solid #10b981', textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#34d399', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>🌀 Volta à Calma</div>
+                                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{parsed.coolDown}</div>
+                                </div>
+                              )}
+                              {parsed.coachTip && (
+                                <div style={{ padding: '0.85rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.02)', border: '1px dashed rgba(245, 158, 11, 0.15)', textAlign: 'left' }}>
+                                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24', marginBottom: '0.3rem', letterSpacing: '0.8px', textTransform: 'uppercase' }}>💡 Dica do Coach</div>
+                                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5', fontStyle: 'italic' }}>"{parsed.coachTip}"</div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Objetivos Fisiológicos */}
                       {(selectedCalendarDay.planDay.objective || selectedCalendarDay.planDay.successCriteria) && (

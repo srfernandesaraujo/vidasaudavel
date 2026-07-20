@@ -799,25 +799,72 @@ Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de cód
 // PLANILHA DE CORRIDA PERSONALIZADA COM IA
 // -------------------------------------------------------------
 
-function generateLocalRunningPlan(
-  targetDistance: number, 
-  weeksCount: number,
-  hasWearable: boolean,
-  maxHeartRate: number,
-  referencePaceStr: string
-): RunningPlan {
+export interface RunningPlanRequest {
+  targetDistance: number;
+  weeksCount: number;
+  hasWearable: boolean;
+  maxHeartRate: number;
+  referencePace: string;
+  availableDays: string[]; // chaves: segunda, terca, quarta, quinta, sexta, sabado, domingo
+  daysPerWeek: number;
+  longRunDay: string; // uma das chaves acima
+  skillLevel: 'iniciante' | 'intermediario' | 'avancado';
+  injuryHistory: string;
+  age?: number;
+  gender?: string;
+  goalType?: string;
+  startDate: string; // YYYY-MM-DD
+}
+
+const WEEKDAY_KEYS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+const WEEKDAY_NAMES: Record<string, string> = {
+  segunda: 'Segunda-feira',
+  terca: 'Terça-feira',
+  quarta: 'Quarta-feira',
+  quinta: 'Quinta-feira',
+  sexta: 'Sexta-feira',
+  sabado: 'Sábado',
+  domingo: 'Domingo'
+};
+
+// Escolhe quais dias da semana recebem treino, respeitando os dias disponíveis informados,
+// a quantidade de dias por semana desejada e garantindo que o dia do treino longo esteja incluído.
+function pickWorkoutDayKeys(availableDays: string[], daysPerWeek: number, longRunDay: string): string[] {
+  const normalizedAvailable = (availableDays && availableDays.length > 0) ? availableDays : ['segunda', 'quarta', 'sabado'];
+  const orderedAvailable = WEEKDAY_KEYS.filter(k => normalizedAvailable.includes(k));
+  const effectiveDaysPerWeek = Math.min(Math.max(daysPerWeek || 3, 1), Math.max(orderedAvailable.length, 1));
+
+  const selected: string[] = [];
+  if (longRunDay && orderedAvailable.includes(longRunDay)) {
+    selected.push(longRunDay);
+  }
+
+  const remaining = orderedAvailable.filter(k => k !== longRunDay);
+  const slotsLeft = Math.max(effectiveDaysPerWeek - selected.length, 0);
+  const step = Math.max(1, Math.floor(remaining.length / Math.max(slotsLeft, 1)));
+  for (let i = 0; i < remaining.length && selected.length < effectiveDaysPerWeek; i += step) {
+    selected.push(remaining[i]);
+  }
+
+  if (selected.length === 0) {
+    selected.push(orderedAvailable[0] || 'segunda');
+  }
+
+  // Reordena cronologicamente (semana começa na segunda-feira)
+  return WEEKDAY_KEYS.filter(k => selected.includes(k));
+}
+
+function generateLocalRunningPlan(request: RunningPlanRequest): RunningPlan {
+  const { targetDistance, weeksCount, hasWearable, maxHeartRate, referencePace: referencePaceStr, availableDays, daysPerWeek, longRunDay, startDate } = request;
   const planId = `plan-${Date.now()}`;
   const weeks: any[] = [];
-  
-  const daysOfWeek = [
-    { name: 'Segunda-feira', isWorkout: true },
-    { name: 'Terça-feira', isWorkout: false },
-    { name: 'Quarta-feira', isWorkout: true },
-    { name: 'Quinta-feira', isWorkout: false },
-    { name: 'Sexta-feira', isWorkout: false },
-    { name: 'Sábado', isWorkout: true },
-    { name: 'Domingo', isWorkout: false },
-  ];
+
+  const workoutKeys = pickWorkoutDayKeys(availableDays, daysPerWeek, longRunDay);
+  const longRunKey = workoutKeys.includes(longRunDay) ? longRunDay : workoutKeys[workoutKeys.length - 1];
+  const speedKey = workoutKeys.find(k => k !== longRunKey) || workoutKeys[0];
+  const tempoKey = workoutKeys.find(k => k !== longRunKey && k !== speedKey);
+
+  const daysOfWeek = WEEKDAY_KEYS.map(key => ({ key, name: WEEKDAY_NAMES[key], isWorkout: workoutKeys.includes(key) }));
 
   // Converte o pace de referência ("MM:SS") para segundos para fazer cálculos matemáticos precisos
   let refSecs = 360; // 06:00 padrão
@@ -877,7 +924,7 @@ function generateLocalRunningPlan(
 
       if (day.isWorkout) {
         isRest = false;
-        if (day.name === 'Segunda-feira') {
+        if (day.key === speedKey) {
           // Treino de tiros ou técnico
           if (targetDistance <= 5) {
             const numTuros = 4 + w;
@@ -907,7 +954,7 @@ function generateLocalRunningPlan(
             objective = `Retardar o acúmulo de ácido lático no organismo, permitindo correr em velocidades maiores por mais tempo.`;
             successCriteria = `Manter os ritmos dos tiros de 800m constantes e dentro da frequência cardíaca de Zona 4 (${z4Range}).`;
           }
-        } else if (day.name === 'Quarta-feira') {
+        } else if (day.key === tempoKey) {
           // Treino de ritmo contínuo
           training = `📈 [CORRIDA DE RITMO / TEMPO RUN]\n` +
                      `- Aquecimento: 8 min de caminhada rápida evoluindo para trote leve (${z1Range}) + rotações circulares de tornozelo.\n` +
@@ -916,7 +963,7 @@ function generateLocalRunningPlan(
                      `- Dica do Treinador: Este é um treino mental. Encontre seu ritmo confortável-desconfortável e controle a respiração em uma proporção de 3 passos inspirando e 3 passos expirando.`;
           objective = `Trabalhar a estabilidade de ritmo de prova e desenvolver resiliência física e mental ao esforço contínuo.`;
           successCriteria = `Completar a distância total de ${midDistance} km em ritmo estável de ${tempoPace} (tolerância de +/- 15s) e sem paradas.`;
-        } else if (day.name === 'Sábado') {
+        } else if (day.key === longRunKey) {
           // Longão progressivo
           if (w === weeksCount) {
             training = `🏆 [DESAFIO FINAL: CONQUISTA DO OBJETIVO]\n` +
@@ -935,6 +982,16 @@ function generateLocalRunningPlan(
             objective = `Construir resistência aeróbica de base, fortalecimento de articulações e adaptação do corpo ao tempo prolongado de corrida.`;
             successCriteria = `Correr os ${longDistance} km de forma contínua mantendo a frequência cardíaca dentro da Zona 2 (${z2Range}).`;
           }
+        } else {
+          // Dia extra de treino quando o atleta escolheu mais dias por semana do que os 3 papéis fixos (tiros/tempo/longão)
+          const easyDistance = Number((midDistance * 0.7).toFixed(1));
+          training = `🌤️ [CORRIDA LEVE REGENERATIVA]\n` +
+                     `- Aquecimento: 5 min de caminhada rápida evoluindo para trote muito leve (${z1Range}).\n` +
+                     `- Parte Principal: Corrida contínua de ${easyDistance} km em ritmo confortável (Zona 1-2 cardíaca, Pace alvo: ${recoveryPace}, FC alvo: ${z1Range}, RPE 3-4), sem se preocupar com velocidade.\n` +
+                     `- Desaquecimento: 5 min de caminhada leve.\n` +
+                     `- Dica do Treinador: Este treino existe para acumular volume sem gerar fadiga. Se sentir cansaço, reduza o ritmo ainda mais.`;
+          objective = `Aumentar o volume semanal de forma segura, favorecendo a recuperação ativa entre os treinos de maior intensidade.`;
+          successCriteria = `Completar os ${easyDistance} km em ritmo confortável, sem elevar a frequência cardíaca acima da Zona 2 (${z2Range}).`;
         }
       }
 
@@ -959,6 +1016,9 @@ function generateLocalRunningPlan(
     targetDistance,
     weeksCount,
     createdAt: new Date().toISOString(),
+    startDate,
+    isActive: true,
+    goalType: request.goalType,
     weeks,
     hasWearable,
     maxHeartRate,
@@ -966,13 +1026,8 @@ function generateLocalRunningPlan(
   };
 }
 
-export async function generateRunningPlan(
-  targetDistance: number, 
-  weeksCount: number,
-  hasWearable: boolean,
-  maxHeartRate: number,
-  referencePace: string
-): Promise<RunningPlan> {
+export async function generateRunningPlan(request: RunningPlanRequest): Promise<RunningPlan> {
+  const { targetDistance, weeksCount, hasWearable, maxHeartRate, referencePace, availableDays, daysPerWeek, longRunDay, skillLevel, injuryHistory, age, gender, startDate } = request;
   const settings = db.getSettings();
 
   const wearableInstructions = hasWearable && maxHeartRate > 0
@@ -987,23 +1042,35 @@ export async function generateRunningPlan(
        - Percepção Subjetiva de Esforço (RPE na escala Borg de 1 a 10).
        - Medição manual de pulso por 15 segundos se houver parada rápida.`;
 
-  const paceInstructions = referencePace 
+  const paceInstructions = referencePace
     ? `Use o Pace de Referência do atleta de ${referencePace} min/km para calcular e sugerir faixas de Pace específicas e milimétricas para os treinos:
        - Pace de Velocidade (tiros): Cerca de 40 a 50 segundos mais rápido que o pace de referência.
        - Pace de Tempo Run: Cerca de 15 a 20 segundos mais lento que o pace de referência.
        - Pace de Rodagem leve/Longão: Cerca de 1 min a 1:15 min mais lento que o pace de referência.`
     : `Sugira paces estimados típicos para um corredor buscando completar a distância de ${targetDistance} km no prazo estipulado.`;
 
+  const availableDayNames = (availableDays && availableDays.length > 0 ? availableDays : ['segunda', 'quarta', 'sabado']).map(k => WEEKDAY_NAMES[k] || k);
+  const longRunDayName = WEEKDAY_NAMES[longRunDay] || longRunDay;
+
+  const profileInstructions = `Perfil do atleta:
+  - Nível de corrida: ${skillLevel || 'não informado'}.
+  - Histórico de lesões: ${injuryHistory || 'não informado'}${injuryHistory === 'frequentes-recentes' ? ' — REDUZA a intensidade/volume de progressão e priorize técnica e fortalecimento preventivo, com progressão mais conservadora entre as semanas' : ''}.
+  ${age ? `- Idade: ${age} anos.` : ''}
+  ${gender ? `- Gênero: ${gender}.` : ''}`;
+
   const prompt = `Você é um Treinador de Elite de Corrida de Rua, mentor de atletas olímpicos e amadores de alta performance em assessorias renomadas internacionalmente.
-  
+
   Gere uma planilha de treinos de corrida altamente técnica, científica e 100% objetiva (sem termos vagos/subjetivos) em formato JSON para um atleta que tem como objetivo correr a distância de ${targetDistance} km no prazo de ${weeksCount} semanas.
-  
+
+  ${profileInstructions}
+
   Retorne estritamente um objeto JSON com esta estrutura exata, sem blocos de código Markdown (como \`\`\`json) ou qualquer texto de introdução/conclusão:
   {
     "id": "plan-${Date.now()}",
     "targetDistance": ${targetDistance},
     "weeksCount": ${weeksCount},
     "createdAt": "${new Date().toISOString()}",
+    "startDate": "${startDate}",
     "hasWearable": ${hasWearable},
     "maxHeartRate": ${maxHeartRate},
     "referencePace": "${referencePace}",
@@ -1091,9 +1158,10 @@ export async function generateRunningPlan(
   No campo "successCriteria", defina o que significa ter cumprido a sessão de forma mensurável (ex: "Concluir os 6 tiros de 400m mantendo o pace médio entre 5:15 e 5:25 min/km e a variação cardíaca não ultrapassar 170 bpm").
   
   Diretrizes de Estrutura Semanal:
-  1. Crie um planejamento de 3 dias de treino ativos por semana (Segunda-feira, Quarta-feira e Sábado) e os outros dias marcados como descanso ("isRest": true).
-  2. A cada semana, a distância e a intensidade do longão de sábado devem progredir de forma linear e segura, atingindo o desafio final na última semana.
-  3. Formate todo o conteúdo em português brasileiro (pt-BR).`;
+  1. O atleta está disponível para treinar apenas nos seguintes dias: ${availableDayNames.join(', ')}. Escolha exatamente ${daysPerWeek} desses dias para serem dias de treino ativo ("isRest": false) por semana, distribuídos de forma espaçada quando possível, e marque todos os demais dias (incluindo os disponíveis não escolhidos) como descanso ("isRest": true).
+  2. O treino longo/longão semanal DEVE cair sempre em ${longRunDayName}.
+  3. A cada semana, a distância e a intensidade do longão devem progredir de forma linear e segura, atingindo o desafio final na última semana.
+  4. Formate todo o conteúdo em português brasileiro (pt-BR).`;
 
   // Se houver chave e provedor válido, faz a chamada
   if (settings.apiKey && settings.apiProvider !== 'none') {
@@ -1112,6 +1180,9 @@ export async function generateRunningPlan(
       
       // Valida se o JSON possui a estrutura mínima
       if (plan && Array.isArray(plan.weeks) && plan.weeks.length > 0) {
+        plan.startDate = plan.startDate || startDate;
+        plan.isActive = true;
+        plan.goalType = request.goalType;
         return plan;
       }
     } catch (err) {
@@ -1123,7 +1194,7 @@ export async function generateRunningPlan(
   // Fallback offline local
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(generateLocalRunningPlan(targetDistance, weeksCount, hasWearable, maxHeartRate, referencePace));
+      resolve(generateLocalRunningPlan(request));
     }, 1000);
   });
 }

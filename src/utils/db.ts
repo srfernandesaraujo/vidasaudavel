@@ -53,6 +53,9 @@ export interface RunningPlan {
   hasWearable?: boolean;
   maxHeartRate?: number;
   referencePace?: string;
+  isActive?: boolean;
+  startDate?: string; // YYYY-MM-DD escolhido no onboarding, usado no lugar de createdAt para mapear a semana 1
+  goalType?: string;
 }
 
 export interface WorkoutLogExercise {
@@ -138,6 +141,11 @@ export interface UserSettings {
   tdeeMode?: 'none' | 'auto';
   dailyDietEmailEnabled?: boolean;
   dailyDietEmailTime?: string;
+  birthDate?: string; // YYYY-MM-DD
+  gender?: 'feminino' | 'masculino' | 'nao-binario' | 'prefiro-nao-responder';
+  runningSkillLevel?: 'iniciante' | 'intermediario' | 'avancado';
+  injuryHistory?: 'raramente' | 'leves-anteriores' | 'frequentes-recentes' | 'prefiro-nao-responder';
+  availableRunDays?: string[]; // ex: ['segunda','quarta','sabado']
 }
 
 export interface Recipe {
@@ -869,21 +877,23 @@ export const db = {
   },
 
   // Planilha de Corrida IA
-  getRunningPlan: (): RunningPlan | null => {
-    const plans = getFromStorage<RunningPlan[]>(KEYS.RUNNING_PLAN, []);
-    if (plans.length === 0) return null;
-    // Ordena decrescente pelo createdAt para garantir que o mais recente seja sempre retornado
-    const sorted = [...plans].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return sorted[0];
-  },
+  getRunningPlans: (): RunningPlan[] => getFromStorage<RunningPlan[]>(KEYS.RUNNING_PLAN, []),
+  // Planilhas antigas não têm o campo isActive — tratadas como ativas por padrão
+  getActiveRunningPlans: (): RunningPlan[] => db.getRunningPlans().filter(p => p.isActive !== false),
   saveRunningPlan: (plan: RunningPlan): void => {
-    saveToStorage(KEYS.RUNNING_PLAN, [plan]);
-    // Salva com ID fixo 'active' no Firestore para sobrescrever o plano anterior e evitar acumular lixo
-    writeToFirestore('running_plans', 'active', plan);
+    const plans = db.getRunningPlans();
+    const index = plans.findIndex(p => p.id === plan.id);
+    if (index >= 0) {
+      plans[index] = plan;
+    } else {
+      plans.push(plan);
+    }
+    saveToStorage(KEYS.RUNNING_PLAN, plans);
+    writeToFirestore('running_plans', plan.id, plan);
   },
-  deleteRunningPlan: (): void => {
-    saveToStorage(KEYS.RUNNING_PLAN, []);
-    removeFromFirestore('running_plans', 'active');
+  deleteRunningPlan: (id: string): void => {
+    saveToStorage(KEYS.RUNNING_PLAN, db.getRunningPlans().filter(p => p.id !== id));
+    removeFromFirestore('running_plans', id);
   },
 
   // Conquistas (Achievements)
