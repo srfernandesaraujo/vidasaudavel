@@ -174,7 +174,8 @@ async function callGeminiAPI(apiKey: string, prompt: string, history: ChatMessag
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ contents })
+    body: JSON.stringify({ contents }),
+    signal: AbortSignal.timeout(20000)
   });
 
   if (!response.ok) {
@@ -213,7 +214,8 @@ async function callOpenAIAPI(apiKey: string, prompt: string, history: ChatMessag
       model: 'gpt-4o-mini',
       messages,
       temperature: 0.7
-    })
+    }),
+    signal: AbortSignal.timeout(20000)
   });
 
   if (!response.ok) {

@@ -239,18 +239,14 @@ export const RunTracker: React.FC = () => {
     if (!runningPlan) return mapping;
 
     const planDate = getPlanBaseDate(runningPlan);
-    const dayOfWeek = planDate.getDay();
-
-    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
 
     runningPlan.weeks.forEach((week) => {
       week.days.forEach((day, dIdx) => {
         let dateStr = day.date;
-        
+
         if (!dateStr) {
-          const d = new Date(mondayOfStartWeek);
-          d.setDate(mondayOfStartWeek.getDate() + ((week.weekNumber - 1) * 7 + dIdx));
+          const d = new Date(planDate);
+          d.setDate(planDate.getDate() + ((week.weekNumber - 1) * 7 + dIdx));
           
           const yyyy = d.getFullYear();
           const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -329,11 +325,8 @@ export const RunTracker: React.FC = () => {
     if (day.date) return day.date;
     if (!runningPlan) return '';
     const planDate = getPlanBaseDate(runningPlan);
-    const dayOfWeek = planDate.getDay();
-    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const mondayOfStartWeek = new Date(planDate.getFullYear(), planDate.getMonth(), planDate.getDate() + diffToMonday);
-    const d = new Date(mondayOfStartWeek);
-    d.setDate(mondayOfStartWeek.getDate() + ((weekNumber - 1) * 7 + dIdx));
+    const d = new Date(planDate);
+    d.setDate(planDate.getDate() + ((weekNumber - 1) * 7 + dIdx));
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
