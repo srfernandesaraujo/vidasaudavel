@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { db, type Recipe, type MealPlan, type FoodLog, type FoodLogItem, type BodyCompLog } from '../utils/db';
+import { db, type Recipe, type MealPlan, type MealPlanItem, type FoodLog, type FoodLogItem, type BodyCompLog } from '../utils/db';
 import { askAINutritionist, askAICoach, parseMealImage, generateShoppingListWithAI, estimateFoodMacros, extractRecipesFromSuggestion, type ChatMessage, type RecipeDraft } from '../utils/aiEngine';
 import { uploadRecipeImage } from '../utils/storage';
 import { buildDailyDietEmailHtml } from '../utils/emailTemplates';
@@ -555,6 +555,13 @@ export const Diet: React.FC = () => {
   });
   const [estimatingMacros, setEstimatingMacros] = useState(false);
 
+  // Modal para adicionar receita diretamente ao cardápio semanal a partir dos detalhes da receita
+  const [showAddRecipeToWeeklyModal, setShowAddRecipeToWeeklyModal] = useState(false);
+  const [targetRecipeForWeekly, setTargetRecipeForWeekly] = useState<Recipe | null>(null);
+  const [weeklyTargetMealId, setWeeklyTargetMealId] = useState<string>('lunch');
+  const [weeklyTargetDateIso, setWeeklyTargetDateIso] = useState<string>('');
+  const [weeklyRepeatDays, setWeeklyRepeatDays] = useState<string[]>([]);
+
   // Datas (YYYY-MM-DD) selecionadas para repetir o mesmo item no mesmo tipo de refeição
   const [repeatOnDays, setRepeatOnDays] = useState<string[]>([]);
 
@@ -653,6 +660,68 @@ export const Diet: React.FC = () => {
     const newPlan = { ...selectedDayPlan, meals: updatedMeals };
     db.saveMealPlan(newPlan);
     refreshDietData();
+  };
+
+  // Abrir modal de inclusão de receita diretamente no cardápio semanal
+  const handleOpenAddRecipeToWeeklyModal = (recipe: Recipe) => {
+    setTargetRecipeForWeekly(recipe);
+    let defaultMeal = 'lunch';
+    if (recipe.mealTypes && recipe.mealTypes.length > 0) {
+      const mt = recipe.mealTypes[0].toLowerCase();
+      if (mt.includes('café') || mt.includes('manhã')) defaultMeal = 'breakfast';
+      else if (mt.includes('jantar')) defaultMeal = 'dinner';
+      else if (mt.includes('lanche')) defaultMeal = 'snack';
+      else if (mt.includes('almoço')) defaultMeal = 'lunch';
+    }
+    setWeeklyTargetMealId(defaultMeal);
+    setWeeklyTargetDateIso(selectedDateStr || todayStr);
+    setWeeklyRepeatDays([]);
+    setShowAddRecipeToWeeklyModal(true);
+  };
+
+  // Salvar receita selecionada no cardápio semanal
+  const handleSaveRecipeToWeeklyPlan = () => {
+    if (!targetRecipeForWeekly) return;
+
+    const rec = targetRecipeForWeekly;
+    const item: MealPlanItem = {
+      recipeId: rec.id,
+      customName: rec.title,
+      calories: rec.id === 'rec-1' ? 420 : rec.id === 'rec-2' ? 240 : 300,
+      protein: rec.id === 'rec-1' ? 32 : rec.id === 'rec-2' ? 24 : 20,
+      carbs: rec.id === 'rec-1' ? 20 : rec.id === 'rec-2' ? 8 : 15,
+      fat: rec.id === 'rec-1' ? 22 : rec.id === 'rec-2' ? 12 : 10
+    };
+
+    const targetDate = weeklyTargetDateIso || selectedDateStr || todayStr;
+    const mainPlan = getOrCreatePlanForDate(targetDate);
+    const updatedMainPlan: MealPlan = {
+      ...mainPlan,
+      meals: mainPlan.meals.map(m => m.id === weeklyTargetMealId ? { ...m, items: [...m.items, item] } : m)
+    };
+    db.saveMealPlan(updatedMainPlan);
+
+    weeklyRepeatDays.forEach(dateIso => {
+      if (dateIso === targetDate) return;
+      const plan = getOrCreatePlanForDate(dateIso);
+      const updatedPlan: MealPlan = {
+        ...plan,
+        meals: plan.meals.map(m => m.id === weeklyTargetMealId ? { ...m, items: [...m.items, item] } : m)
+      };
+      db.saveMealPlan(updatedPlan);
+    });
+
+    setShowAddRecipeToWeeklyModal(false);
+    setTargetRecipeForWeekly(null);
+    refreshDietData();
+
+    confetti({
+      particleCount: 65,
+      spread: 60,
+      origin: { y: 0.6 },
+      colors: ['#f97316', '#ffb077', '#10b981']
+    });
+    alert(`Receita "${rec.title}" foi adicionada com sucesso ao seu Cardápio Semanal!`);
   };
 
   // Lança o planejamento do dia atual como consumido no diário de hoje
@@ -2566,6 +2635,15 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
           {/* Botões de Ações Rápidas da Receita */}
           <div className="recipe-actions-row">
             <button 
+              type="button" 
+              className="recipe-action-btn"
+              style={{ borderColor: 'var(--accent-orange)', color: 'var(--accent-orange)', background: 'rgba(249, 115, 22, 0.12)' }}
+              onClick={() => handleOpenAddRecipeToWeeklyModal(selectedRecipe)}
+            >
+              <Calendar size={14} />
+              <span>Adicionar ao Cardápio</span>
+            </button>
+            <button 
               type="button"
               className={`recipe-action-btn ${selectedRecipe.isFavorite ? 'favorite-active' : ''}`}
               onClick={() => handleToggleFavorite(selectedRecipe)}
@@ -3242,6 +3320,120 @@ Analisei seus dados biométricos de bioimpedância e seu nível de treino de mus
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleAddMealItem}>Adicionar Item</button>
               <button className="btn btn-secondary" onClick={() => setShowAddMealModal(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADICIONAR RECEITA DIRETA AO CARDÁPIO SEMANAL */}
+      {showAddRecipeToWeeklyModal && targetRecipeForWeekly && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ padding: '1.5rem', textAlign: 'left', maxWidth: '480px' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={18} style={{ color: 'var(--accent-orange)' }} />
+              Adicionar ao Cardápio Semanal
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+              Receita: <strong style={{ color: 'var(--accent-orange)' }}>{targetRecipeForWeekly.title}</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Seleção do Dia */}
+              <div className="form-group">
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem', display: 'block', color: 'var(--text-primary)' }}>
+                  Selecione o Dia:
+                </label>
+                <select
+                  className="form-control"
+                  value={weeklyTargetDateIso}
+                  onChange={(e) => setWeeklyTargetDateIso(e.target.value)}
+                >
+                  {plannerDates.map((date, idx) => {
+                    const iso = date.toISOString().split('T')[0];
+                    const label = date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' });
+                    return (
+                      <option key={idx} value={iso}>
+                        {iso === todayStr ? `Hoje (${label})` : label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Seleção do Tipo de Refeição */}
+              <div className="form-group">
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem', display: 'block', color: 'var(--text-primary)' }}>
+                  Tipo de Refeição:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  {[
+                    { id: 'breakfast', label: 'Café da Manhã' },
+                    { id: 'lunch', label: 'Almoço' },
+                    { id: 'dinner', label: 'Jantar' },
+                    { id: 'snack', label: 'Lanches' }
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`btn ${weeklyTargetMealId === m.id ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ padding: '0.45rem 0.6rem', fontSize: '0.8rem', justifyContent: 'center' }}
+                      onClick={() => setWeeklyTargetMealId(m.id)}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Repetir em outros dias */}
+              <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', display: 'block' }}>
+                  Repetir também em outros dias da semana:
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {plannerDates.map((date, idx) => {
+                    const dateIso = date.toISOString().split('T')[0];
+                    if (dateIso === weeklyTargetDateIso) return null;
+                    const checked = weeklyRepeatDays.includes(dateIso);
+                    return (
+                      <label
+                        key={idx}
+                        className="checkbox-label"
+                        style={{
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '6px',
+                          padding: '0.3rem 0.6rem',
+                          fontSize: '0.75rem',
+                          color: checked ? 'var(--accent-orange)' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setWeeklyRepeatDays(prev =>
+                              prev.includes(dateIso) ? prev.filter(d => d !== dateIso) : [...prev, dateIso]
+                            );
+                          }}
+                        />
+                        <span style={{ textTransform: 'capitalize' }}>
+                          {date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSaveRecipeToWeeklyPlan}>
+                Adicionar ao Cardápio
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowAddRecipeToWeeklyModal(false)}>
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
